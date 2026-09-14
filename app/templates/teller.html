@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.full_name }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Home</a></li>
+    <li><span aria-current="page">{{ employee.full_name }}</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>{{ employee.full_name }}</h1>
+</section>
+{% endblock %}

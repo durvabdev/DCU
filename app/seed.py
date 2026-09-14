@@ -19,14 +19,16 @@ DEMO_EMPLOYEES = [
         "username": "j.patel",
         "password": "Willowbrook!25",
         "full_name": "Jordan Patel",
-        "title": "Member Services Specialist",
+        "title": "Teller",
+        "teller_id": "T-1001",
     },
     {
         "id": "EMP-200",
         "username": "m.okonkwo",
         "password": "Stoneharbor!31",
         "full_name": "Maya Okonkwo",
-        "title": "Senior Member Advocate",
+        "title": "Teller",
+        "teller_id": "T-2001",
     },
 ]
 
@@ -424,6 +426,7 @@ def seed_database(db: Session) -> None:
                 password_hash=hash_password(row["password"]),
                 full_name=row["full_name"],
                 title=row["title"],
+                teller_id=row["teller_id"],
             )
         )
     db.add_all(employees)

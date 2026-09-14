@@ -22,11 +22,22 @@ def test_invalid_login_shows_error(client: TestClient):
     assert "/login" in home.headers["location"]
 
 
-def test_successful_login_reaches_search(auth_client: TestClient):
+def test_successful_login_reaches_home(auth_client: TestClient):
     response = auth_client.get("/")
     assert response.status_code == 200
-    assert "Member search" in response.text
+    assert "Home" in response.text
+    assert "Jordan Patel" in response.text
+    assert "teller (T-1001)" in response.text
+    assert 'href="/members"' in response.text
     assert "Log out" in response.text
+
+
+def test_teller_details_page(auth_client: TestClient):
+    response = auth_client.get("/teller")
+    assert response.status_code == 200
+    assert "<h1>Jordan Patel</h1>" in response.text
+    assert 'href="/teller"' in response.text
+    assert "teller (T-1001)" in response.text
 
 
 def test_protected_route_redirects_when_anonymous(client: TestClient):

@@ -8,6 +8,16 @@ router = APIRouter()
 
 
 @router.get("/")
+async def home(request: Request):
+    return render(request, "home.html")
+
+
+@router.get("/teller")
+async def teller_profile(request: Request):
+    return render(request, "teller.html")
+
+
+@router.get("/members")
 async def member_search(request: Request):
     db = request.state.db
     submitted = "q" in request.query_params

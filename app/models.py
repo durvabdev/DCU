@@ -18,6 +18,7 @@ class Employee(Base):
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     full_name: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(128), nullable=False)
+    teller_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
 
     notes: Mapped[list[InvestigationNote]] = relationship(back_populates="author")
 

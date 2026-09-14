@@ -6,7 +6,7 @@ Amounts are shown as currency (`$1,234.56`). IDs keep leading zeros.
 
 ## Main investigation
 
-1. Sign in and search for member ID `001234`.
+1. Sign in, open **Member** in the blue bar, and search for member ID `001234`.
 2. Open **Elena Vargas**. Confirm checking `CK-1001` and loan `LN-1001`.
 3. Open `LN-1001`. The balance is labeled **Outstanding balance** and is **$3,532.08**.
 4. Apply filters, then open a transaction and add an investigation note (enter → review → confirm). The success page shows a persisted note ID.
