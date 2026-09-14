@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Member Services{% endblock %} · Dough Credit Union</title>
+  <link rel="stylesheet" href="/static/styles.css?v=schlow-5">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <div class="page-wrap">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-top">
+      <a class="brand" href="{% if employee %}/{% else %}/login{% endif %}">
+        <span class="brand-mark">
+          <span>Dough</span>
+          <span>Credit</span>
+          <span>Union</span>
+        </span>
+      </a>
+      <time id="header-clock" class="header-clock" datetime="" aria-live="off"> </time>
+      {% if employee %}
+      <div class="header-utils">
+        <span class="who">{{ employee.full_name }} · {{ employee.title }}</span>
+        <form method="post" action="/logout" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" name="logout" class="btn-login">Log out</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    {% if employee %}
+    <nav class="main-nav" aria-label="Primary">
+      <ul>
+        <li><a href="/">Member search</a></li>
+      </ul>
+    </nav>
+    {% endif %}
+  </header>
+  <div id="loading-overlay" hidden>
+    <p>Loading results…</p>
+  </div>
+  <main id="main" class="site-main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <p>Internal use only. Demonstration data — not a production banking system.</p>
+  </footer>
+  </div>
+  <script src="/static/app.js?v=clock-2"></script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Transaction {{ transaction.id }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li>
+      {% if return_to %}
+      <a href="{{ return_to }}">{{ account.id }}</a>
+      {% else %}
+      <a href="/accounts/{{ account.id }}">{{ account.id }}</a>
+      {% endif %}
+    </li>
+    <li><span aria-current="page">{{ transaction.id }}</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Transaction {{ transaction.id }}</h1>
+  <dl class="facts">
+    <div><dt>Transaction ID</dt><dd>{{ transaction.id }}</dd></div>
+    <div><dt>Account ID</dt><dd>{{ account.id }}</dd></div>
+    <div><dt>Member ID</dt><dd>{{ member.id }}</dd></div>
+    <div><dt>Date</dt><dd>{{ transaction.posted_on.isoformat() }}</dd></div>
+    <div><dt>Description</dt><dd>{{ transaction.description }}</dd></div>
+    <div><dt>Amount</dt><dd>{{ transaction.amount_cents | money }} {{ transaction.currency }}</dd></div>
+    <div><dt>Direction</dt><dd>{{ transaction.direction }}</dd></div>
+    <div><dt>Status</dt><dd>{{ transaction.status }}</dd></div>
+  </dl>
+</section>
+<section class="panel">
+  <div class="section-head">
+    <h2>Investigation notes</h2>
+    {% if can_add_note %}
+    <a class="button" href="/transactions/{{ transaction.id }}/notes/new{% if return_to %}?return_to={{ return_to | urlencode }}{% endif %}">Add Investigation Note</a>
+    {% else %}
+    <p class="meta">Notes cannot be added because this account is inactive.</p>
+    {% endif %}
+  </div>
+  {% if notes %}
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Note ID</th>
+        <th scope="col">Author</th>
+        <th scope="col">Recorded</th>
+        <th scope="col">Category</th>
+        <th scope="col">Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for note in notes %}
+      <tr>
+        <td>{{ note.id }}</td>
+        <td>{{ note.author.full_name }}</td>
+        <td>{{ note.created_at | datetime }}</td>
+        <td>{{ note.category }}</td>
+        <td>{{ note.body }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No investigation notes have been recorded for this transaction.</p>
+  {% endif %}
+</section>
+{% endblock %}

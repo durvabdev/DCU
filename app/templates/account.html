@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Account {{ account.id }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><span aria-current="page">{{ account.id }}</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>{{ account.type_label }} {{ account.id }}</h1>
+  <dl class="facts">
+    <div><dt>Owner ID</dt><dd>{{ member.id }}</dd></div>
+    <div><dt>Owner name</dt><dd>{{ member.full_name }}</dd></div>
+    <div><dt>Account status</dt><dd><span class="badge badge-{{ account.status }}">{{ account.status }}</span></dd></div>
+    <div><dt>Currency</dt><dd>{{ account.currency }}</dd></div>
+    <div>
+      <dt>{{ account.balance_label }}</dt>
+      <dd>{{ account.balance_cents | money }}</dd>
+    </div>
+  </dl>
+</section>
+<section class="panel">
+  <h2>Transactions</h2>
+  {% if temp_error %}
+  <p class="alert alert-error" role="alert">Transaction search failed due to a temporary error.</p>
+  <a class="button" href="{{ retry_url }}">Retry</a>
+  {% else %}
+  {% if errors %}
+  <ul class="alert alert-error" role="alert">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <form method="get" action="/accounts/{{ account.id }}" class="filters" data-loading="true">
+    <div class="field">
+      <label for="start_date">Start date</label>
+      <input id="start_date" name="start_date" type="date" value="{{ start_date }}">
+    </div>
+    <div class="field">
+      <label for="end_date">End date</label>
+      <input id="end_date" name="end_date" type="date" value="{{ end_date }}">
+    </div>
+    <div class="field">
+      <label for="min_amount">Amount strictly greater than</label>
+      <input id="min_amount" name="min_amount" type="text" inputmode="decimal" value="{{ min_amount }}" placeholder="500.00">
+    </div>
+    <div class="field">
+      <label for="direction">Direction</label>
+      <select id="direction" name="direction">
+        <option value="all" {% if direction == "all" %}selected{% endif %}>All</option>
+        <option value="debit" {% if direction == "debit" %}selected{% endif %}>Debit</option>
+        <option value="credit" {% if direction == "credit" %}selected{% endif %}>Credit</option>
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" name="apply_filters" data-testid="apply-filters">{{ apply_label }}</button>
+      <a class="button-secondary" href="/accounts/{{ account.id }}">Clear Filters</a>
+    </div>
+  </form>
+  {% if not errors %}
+    {% if total == 0 %}
+      <p class="empty" data-testid="empty-transactions">
+        {% if start_date or end_date or min_amount or direction != "all" %}
+        No transactions match the selected filters.
+        {% else %}
+        No transactions for this account.
+        {% endif %}
+      </p>
+    {% else %}
+      <p class="meta" data-testid="result-count">Showing {{ range_start }}–{{ range_end }} of {{ total }} transactions.</p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Transaction ID</th>
+            <th scope="col">Date</th>
+            <th scope="col">Description</th>
+            <th scope="col">Amount</th>
+            <th scope="col">Direction</th>
+            <th scope="col">Status</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for txn in transactions %}
+          <tr>
+            <td>{{ txn.id }}</td>
+            <td>{{ txn.posted_on.isoformat() }}</td>
+            <td>{{ txn.description }}</td>
+            <td>{{ txn.amount_cents | money }}</td>
+            <td>{{ txn.direction }}</td>
+            <td>{{ txn.status }}</td>
+            <td>
+              {% set return_path = "/accounts/" + account.id + (("?" + filter_query) if filter_query else "") %}
+              <a href="/transactions/{{ txn.id }}?return_to={{ return_path | urlencode }}">View Transaction</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if page_count > 1 %}
+      <nav class="pagination" aria-label="Transaction pages">
+        {% if page > 1 %}
+        <a rel="prev" href="/accounts/{{ account.id }}?{{ filter_query }}{% if filter_query %}&amp;{% endif %}page={{ page - 1 }}">Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ page_count }}</span>
+        {% if page < page_count %}
+        <a rel="next" href="/accounts/{{ account.id }}?{{ filter_query }}{% if filter_query %}&amp;{% endif %}page={{ page + 1 }}">Next</a>
+        {% endif %}
+      </nav>
+      {% endif %}
+    {% endif %}
+  {% endif %}
+  {% endif %}
+</section>
+{% endblock %}

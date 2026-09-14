@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Investigation note saved{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
+    <li><a href="/transactions/{{ transaction.id }}">{{ transaction.id }}</a></li>
+    <li><span aria-current="page">Note saved</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Investigation note saved</h1>
+  <p class="alert alert-success" role="status">The note was recorded successfully.</p>
+  <dl class="facts">
+    <div><dt>Note ID</dt><dd data-testid="saved-note-id">{{ note.id }}</dd></div>
+    <div><dt>Author</dt><dd>{{ note.author.full_name }}</dd></div>
+    <div><dt>Recorded</dt><dd>{{ note.created_at | datetime }}</dd></div>
+    <div><dt>Category</dt><dd>{{ note.category }}</dd></div>
+    <div class="full"><dt>Note</dt><dd class="prewrap">{{ note.body }}</dd></div>
+  </dl>
+  <p><a class="button" href="/transactions/{{ transaction.id }}">View transaction</a></p>
+</section>
+{% endblock %}

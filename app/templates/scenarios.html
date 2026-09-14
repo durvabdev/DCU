@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Development scenarios{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><span aria-current="page">Development scenarios</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Development scenarios</h1>
+  <p class="lede">Session-scoped fault injection for automation. This page is not linked from product navigation.</p>
+  {% if flash %}
+  <p class="alert alert-success" role="status">{{ flash }}</p>
+  {% endif %}
+  {% if error %}
+  <p class="alert alert-error" role="alert">{{ error }}</p>
+  {% endif %}
+  <dl class="facts">
+    <div><dt>Expire next request</dt><dd>{{ "queued" if flags.expire_next else "off" }}</dd></div>
+    <div><dt>Slow results</dt><dd>{{ flags.slow_seconds ~ " seconds" if flags.slow_seconds else "off" }}</dd></div>
+    <div><dt>Temporary error</dt><dd>{{ "queued" if flags.temp_error_next else "off" }}</dd></div>
+    <div><dt>Filter button label</dt><dd>{{ "Search Transactions" if flags.rename_apply_filters else "Apply Filters" }}</dd></div>
+    <div><dt>Uncertain note</dt><dd>{{ "queued" if flags.uncertain_note_next else "off" }}</dd></div>
+  </dl>
+</section>
+<section class="panel scenario-grid">
+  <form method="post" action="/dev/scenarios" class="scenario-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Session expiry</h2>
+    <p>The next protected request (other than this page) invalidates the session and redirects to sign-in.</p>
+    <button type="submit" name="action" value="expire">Queue session expiry</button>
+  </form>
+  <form method="post" action="/dev/scenarios" class="scenario-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Slow results</h2>
+    <p>The next transaction search waits before returning. The account page shows a loading state and disables resubmit.</p>
+    <div class="field">
+      <label for="slow_seconds">Delay in seconds</label>
+      <input id="slow_seconds" name="slow_seconds" type="number" min="1" max="30" value="3">
+    </div>
+    <button type="submit" name="action" value="slow">Queue slow results</button>
+  </form>
+  <form method="post" action="/dev/scenarios" class="scenario-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Temporary error</h2>
+    <p>The next transaction search fails once and shows a Retry button.</p>
+    <button type="submit" name="action" value="temp-error">Queue temporary error</button>
+  </form>
+  <form method="post" action="/dev/scenarios" class="scenario-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>UI variation</h2>
+    <p>Rename <strong>Apply Filters</strong> to <strong>Search Transactions</strong> for this session. Filtering is unchanged.</p>
+    <button type="submit" name="action" value="ui-variation">Toggle filter button label</button>
+  </form>
+  <form method="post" action="/dev/scenarios" class="scenario-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Uncertain note</h2>
+    <p>The next note confirmation saves the note, then shows an interrupted-response page. Retrying the same token must not insert a second note.</p>
+    <button type="submit" name="action" value="uncertain-note">Queue uncertain note</button>
+  </form>
+  <form method="post" action="/dev/scenarios" class="scenario-card danger-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h2>Reset demonstration data</h2>
+    <p>Deletes local demonstration data in this database, restores the deterministic seed, and clears scenario flags. This cannot be undone.</p>
+    <button type="submit" name="action" value="reset" class="danger">Reset database</button>
+  </form>
+</section>
+{% endblock %}

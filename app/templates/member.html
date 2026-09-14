@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ member.full_name }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><span aria-current="page">{{ member.full_name }}</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>{{ member.full_name }}</h1>
+  <p class="lede">Member profile for internal investigation.</p>
+  <dl class="facts">
+    <div><dt>Member ID</dt><dd>{{ member.id }}</dd></div>
+    <div><dt>Status</dt><dd><span class="badge badge-{{ member.status }}">{{ member.status }}</span></dd></div>
+    <div><dt>Email</dt><dd>{{ member.email }}</dd></div>
+    <div><dt>Phone</dt><dd>{{ member.phone }}</dd></div>
+    <div><dt>Address</dt><dd>{{ member.street }}, {{ member.city }}, {{ member.state }} {{ member.postal_code }}</dd></div>
+  </dl>
+</section>
+<section class="panel">
+  <h2>Accounts</h2>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Account ID</th>
+        <th scope="col">Type</th>
+        <th scope="col">Status</th>
+        <th scope="col">Currency</th>
+        <th scope="col">Balance</th>
+        <th scope="col">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for account in accounts %}
+      <tr>
+        <td>{{ account.id }}</td>
+        <td>{{ account.type_label }}</td>
+        <td><span class="badge badge-{{ account.status }}">{{ account.status }}</span></td>
+        <td>{{ account.currency }}</td>
+        <td>
+          <span class="balance-label">{{ account.balance_label }}</span>
+          {{ account.balance_cents | money }}
+        </td>
+        <td><a href="/accounts/{{ account.id }}">View Account</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

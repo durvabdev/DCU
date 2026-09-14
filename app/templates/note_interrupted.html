@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Confirmation interrupted{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
+    <li><a href="/transactions/{{ transaction.id }}">{{ transaction.id }}</a></li>
+    <li><span aria-current="page">Interrupted response</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Confirmation interrupted</h1>
+  <p class="alert alert-warn" role="alert">
+    The confirmation response was interrupted before it reached the browser.
+    The note may already have been saved. Retry to confirm. Retrying will not create a duplicate note.
+  </p>
+  <form method="post" action="/transactions/{{ transaction.id }}/notes/confirm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="idempotency_token" value="{{ token }}">
+    <input type="hidden" name="body" value="{{ body }}">
+    <input type="hidden" name="category" value="{{ category }}">
+    <input type="hidden" name="return_to" value="{{ return_to }}">
+    <button type="submit" name="retry_confirmation" data-testid="retry-confirmation">Retry confirmation</button>
+  </form>
+</section>
+{% endblock %}

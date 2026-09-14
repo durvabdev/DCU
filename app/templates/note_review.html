@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Review investigation note{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Member search</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
+    <li><a href="/transactions/{{ transaction.id }}">{{ transaction.id }}</a></li>
+    <li><span aria-current="page">Review note</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Review investigation note</h1>
+  <p class="lede">Confirm the details below. This will record a note against the transaction.</p>
+  <dl class="facts">
+    <div><dt>Member ID</dt><dd>{{ member.id }}</dd></div>
+    <div><dt>Account ID</dt><dd>{{ account.id }}</dd></div>
+    <div><dt>Transaction ID</dt><dd>{{ transaction.id }}</dd></div>
+    <div><dt>Category</dt><dd>{{ category }}</dd></div>
+    <div class="full"><dt>Note</dt><dd class="prewrap">{{ body }}</dd></div>
+  </dl>
+  <form method="post" action="/transactions/{{ transaction.id }}/notes/confirm" class="inline-actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="idempotency_token" value="{{ token }}">
+    <input type="hidden" name="body" value="{{ body }}">
+    <input type="hidden" name="category" value="{{ category }}">
+    <input type="hidden" name="return_to" value="{{ return_to }}">
+    <button type="submit" name="confirm_note" data-testid="confirm-note">Confirm</button>
+  </form>
+  <form method="get" action="/transactions/{{ transaction.id }}/notes/new" class="inline-actions">
+    {% if return_to %}<input type="hidden" name="return_to" value="{{ return_to }}">{% endif %}
+    <button type="submit" class="button-secondary" name="edit_note">Back to edit</button>
+  </form>
+</section>
+{% endblock %}
