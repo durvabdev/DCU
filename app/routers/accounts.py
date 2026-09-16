@@ -5,7 +5,6 @@ from decimal import InvalidOperation
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
 
 from app.models import Account, Transaction

@@ -15,7 +15,12 @@ def test_order_cheque_book_debits_fee_on_checking(auth_client: TestClient):
     finally:
         db.close()
 
-    page = auth_client.get("/accounts/CK-1001/cheque-books/new")
+    member_page = auth_client.get("/members/001234")
+    assert member_page.status_code == 200
+    assert "Order cheque book" in member_page.text
+    assert 'href="/members/001234/cheque-books/new"' in member_page.text
+
+    page = auth_client.get("/members/001234/cheque-books/new")
     assert page.status_code == 200
     assert "Standard — 25 pages ($15.00)" in page.text
     assert "Business — 50 pages ($25.00)" in page.text
@@ -23,7 +28,7 @@ def test_order_cheque_book_debits_fee_on_checking(auth_client: TestClient):
     assert 'value="CK-1001"' in page.text
     csrf = extract_csrf(page.text)
     response = auth_client.post(
-        "/accounts/CK-1001/cheque-books/new",
+        "/members/001234/cheque-books/new",
         data={
             "csrf_token": csrf,
             "book_type": "business",
@@ -33,13 +38,13 @@ def test_order_cheque_book_debits_fee_on_checking(auth_client: TestClient):
     )
     assert response.status_code == 303
     location = response.headers["location"]
-    assert location.startswith("/transactions/")
+    assert location.startswith("/members/001234")
 
-    txn_page = auth_client.get(location)
-    assert txn_page.status_code == 200
-    assert "Cheque issue — Business (50 pages)" in txn_page.text
-    assert "$25.00" in txn_page.text
-    assert "debit" in txn_page.text
+    member_after = auth_client.get(location)
+    assert member_after.status_code == 200
+    assert 'class="alert alert-success"' in member_after.text
+    assert "Cheque book ordered. Debited $25.00 from CK-1001." in member_after.text
+    assert "TX-CK-1001-" in member_after.text
 
     db = SessionLocal()
     try:
@@ -62,12 +67,12 @@ def test_order_cheque_book_can_debit_sibling_savings(auth_client: TestClient):
     finally:
         db.close()
 
-    page = auth_client.get("/accounts/CK-2010/cheque-books/new")
+    page = auth_client.get("/members/002010/cheque-books/new")
     assert page.status_code == 200
     assert 'value="SV-2010"' in page.text
     csrf = extract_csrf(page.text)
     response = auth_client.post(
-        "/accounts/CK-2010/cheque-books/new",
+        "/members/002010/cheque-books/new",
         data={
             "csrf_token": csrf,
             "book_type": "standard",
@@ -77,11 +82,13 @@ def test_order_cheque_book_can_debit_sibling_savings(auth_client: TestClient):
     )
     assert response.status_code == 303
     location = response.headers["location"]
-    assert location.startswith("/transactions/TX-SV-2010-")
+    assert location.startswith("/members/002010")
 
-    txn_page = auth_client.get(location)
-    assert "Cheque issue — Standard (25 pages)" in txn_page.text
-    assert "$15.00" in txn_page.text
+    member_after = auth_client.get(location)
+    assert member_after.status_code == 200
+    assert 'class="alert alert-success"' in member_after.text
+    assert "Cheque book ordered. Debited $15.00 from SV-2010." in member_after.text
+    assert "TX-SV-2010-" in member_after.text
 
     db = SessionLocal()
     try:
@@ -95,7 +102,7 @@ def test_order_cheque_book_can_debit_sibling_savings(auth_client: TestClient):
 
 def test_cheque_book_requires_csrf(auth_client: TestClient):
     response = auth_client.post(
-        "/accounts/CK-1001/cheque-books/new",
+        "/members/001234/cheque-books/new",
         data={
             "csrf_token": "invalid",
             "book_type": "standard",
@@ -106,30 +113,43 @@ def test_cheque_book_requires_csrf(auth_client: TestClient):
     assert "This form could not be verified." in response.text
 
 
-def test_cheque_book_blocked_on_inactive_checking(auth_client: TestClient):
-    response = auth_client.get("/accounts/CK-4200/cheque-books/new")
+def test_cheque_book_blocked_without_active_checking(auth_client: TestClient):
+    response = auth_client.get("/members/004200/cheque-books/new")
     assert response.status_code == 403
-    assert "Cheque books cannot be ordered on an inactive account." in response.text
+    assert "Cheque books require an active checking account." in response.text
 
     account_page = auth_client.get("/accounts/CK-4200")
     assert account_page.status_code == 200
     assert "Order cheque book" not in account_page.text
 
 
-def test_cheque_book_blocked_on_savings_and_loan(auth_client: TestClient):
-    savings = auth_client.get("/accounts/SV-5500/cheque-books/new")
-    assert savings.status_code == 403
-    assert "Cheque books can only be ordered for checking accounts." in savings.text
+def test_cheque_book_blocked_on_inactive_member(auth_client: TestClient):
+    from app.database import SessionLocal
+    from app.models import Member
 
+    db = SessionLocal()
+    try:
+        member = db.get(Member, "001234")
+        assert member is not None
+        member.status = "inactive"
+        db.commit()
+    finally:
+        db.close()
+
+    response = auth_client.get("/members/001234/cheque-books/new")
+    assert response.status_code == 403
+    assert "Cheque books can only be ordered for active members." in response.text
+
+
+def test_cheque_book_not_on_account_pages(auth_client: TestClient):
     savings_page = auth_client.get("/accounts/SV-5500")
     assert "Order cheque book" not in savings_page.text
 
-    loan = auth_client.get("/accounts/LN-1001/cheque-books/new")
-    assert loan.status_code == 403
-    assert "Cheque books can only be ordered for checking accounts." in loan.text
-
     loan_page = auth_client.get("/accounts/LN-1001")
     assert "Order cheque book" not in loan_page.text
+
+    checking_page = auth_client.get("/accounts/CK-1001")
+    assert "Order cheque book" not in checking_page.text
 
 
 def test_cheque_book_rejects_overdraft(auth_client: TestClient):
@@ -145,10 +165,10 @@ def test_cheque_book_rejects_overdraft(auth_client: TestClient):
     finally:
         db.close()
 
-    page = auth_client.get("/accounts/CK-5500/cheque-books/new")
+    page = auth_client.get("/members/005500/cheque-books/new")
     csrf = extract_csrf(page.text)
     response = auth_client.post(
-        "/accounts/CK-5500/cheque-books/new",
+        "/members/005500/cheque-books/new",
         data={
             "csrf_token": csrf,
             "book_type": "standard",
@@ -160,10 +180,10 @@ def test_cheque_book_rejects_overdraft(auth_client: TestClient):
 
 
 def test_cheque_book_rejects_foreign_fee_account(auth_client: TestClient):
-    page = auth_client.get("/accounts/CK-1001/cheque-books/new")
+    page = auth_client.get("/members/001234/cheque-books/new")
     csrf = extract_csrf(page.text)
     response = auth_client.post(
-        "/accounts/CK-1001/cheque-books/new",
+        "/members/001234/cheque-books/new",
         data={
             "csrf_token": csrf,
             "book_type": "standard",

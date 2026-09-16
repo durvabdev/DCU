@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
@@ -6,7 +8,13 @@ from app.middleware import csrf_forbidden
 from app.models import Account, Member, Transaction
 from app.security import require_csrf
 from app.templating import render
-from app.utils import apply_balance_delta, next_account_id, next_transaction_id, utcnow
+from app.utils import (
+    apply_balance_delta,
+    format_money,
+    next_account_id,
+    next_transaction_id,
+    utcnow,
+)
 
 router = APIRouter()
 
@@ -389,4 +397,11 @@ async def cheque_book_new_submit(request: Request, member_id: str):
     fee_account.balance_cents = proposed
     db.add(transaction)
     db.flush()
-    return RedirectResponse(f"/transactions/{transaction.id}", status_code=303)
+    flash = (
+        f"Cheque book ordered. Debited {format_money(fee_cents)} "
+        f"from {fee_account.id}. {transaction.id}"
+    )
+    return RedirectResponse(
+        f"/members/{member.id}?flash={quote(flash)}",
+        status_code=303,
+    )
