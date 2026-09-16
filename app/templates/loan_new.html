@@ -14,9 +14,6 @@
     <div><dt>Member ID</dt><dd>{{ member.id }}</dd></div>
     <div><dt>Member name</dt><dd>{{ member.full_name }}</dd></div>
   </dl>
-  {% if flash %}
-  <p class="alert alert-success" role="status">{{ flash }}</p>
-  {% endif %}
   {% if errors %}
   <ul class="alert alert-error" role="alert">
     {% for error in errors %}<li>{{ error }}</li>{% endfor %}
@@ -26,10 +23,10 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label for="outstanding_balance">Outstanding balance</label>
-      <input id="outstanding_balance" name="outstanding_balance" type="text" inputmode="decimal" value="{{ outstanding_balance }}"{% if not opened %} required{% endif %}{% if opened %} disabled{% endif %}>
+      <input id="outstanding_balance" name="outstanding_balance" type="text" inputmode="decimal" value="{{ outstanding_balance }}" required>
     </div>
     <div class="filter-actions">
-      <button type="submit"{% if opened %} disabled{% endif %}>Open loan</button>
+      <button type="submit">Open loan</button>
       <a class="button-secondary" href="/loans/new">Cancel</a>
     </div>
   </form>

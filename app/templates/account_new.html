@@ -11,9 +11,6 @@
 <section class="panel">
   <h1>Open account</h1>
   <p class="lede">Open a checking or savings account. New accounts start at $0.00.</p>
-  {% if flash %}
-  <p class="alert alert-success" role="status">{{ flash }}</p>
-  {% endif %}
   {% if errors %}
   <ul class="alert alert-error" role="alert">
     {% for error in errors %}<li>{{ error }}</li>{% endfor %}
@@ -23,13 +20,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label for="account_type">Account type</label>
-      <select id="account_type" name="account_type"{% if opened %} disabled{% endif %}>
+      <select id="account_type" name="account_type">
         <option value="checking" {% if account_type == "checking" %}selected{% endif %}>Checking</option>
         <option value="savings" {% if account_type == "savings" %}selected{% endif %}>Savings</option>
       </select>
     </div>
     <div class="filter-actions">
-      <button type="submit"{% if opened %} disabled{% endif %}>Open account</button>
+      <button type="submit">Open account</button>
       <a class="button-secondary" href="/members/{{ member.id }}">Cancel</a>
     </div>
   </form>
