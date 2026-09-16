@@ -1,5 +1,3 @@
-from decimal import InvalidOperation
-
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
@@ -8,7 +6,7 @@ from app.middleware import csrf_forbidden
 from app.models import Account, Member
 from app.security import require_csrf
 from app.templating import render
-from app.utils import parse_amount_to_cents
+from app.utils import next_account_id
 
 router = APIRouter()
 
@@ -96,18 +94,6 @@ def _validate_member_form(form) -> tuple[dict[str, str], list[str]]:
     return values, errors
 
 
-def _next_account_id(existing_ids: list[str], prefix: str) -> str:
-    max_suffix = 0
-    for account_id in existing_ids:
-        if not account_id.startswith(f"{prefix}-"):
-            continue
-        try:
-            max_suffix = max(max_suffix, int(account_id.split("-", 1)[1]))
-        except ValueError:
-            continue
-    return f"{prefix}-{max_suffix + 1:04d}"
-
-
 @router.get("/members/{member_id}/edit")
 async def member_edit_form(request: Request, member_id: str):
     db = request.state.db
@@ -174,7 +160,6 @@ async def account_new_form(request: Request, member_id: str):
         "account_new.html",
         member=member,
         account_type="checking",
-        opening_amount="0",
         errors=[],
     )
 
@@ -205,18 +190,10 @@ async def account_new_submit(request: Request, member_id: str):
         return csrf_forbidden(request)
 
     account_type = (form.get("account_type") or "checking").strip()
-    opening_amount = (form.get("opening_amount") or "0").strip()
     errors: list[str] = []
-    type_map = {"checking": "CK", "savings": "SV", "loan": "LN"}
+    type_map = {"checking": "CK", "savings": "SV"}
     if account_type not in type_map:
         errors.append("Select a valid account type.")
-    try:
-        opening_cents = parse_amount_to_cents(opening_amount or "0")
-        if opening_cents < 0:
-            errors.append("Opening amount must be zero or greater.")
-    except (InvalidOperation, ValueError):
-        opening_cents = 0
-        errors.append("Enter a valid opening amount.")
 
     if errors:
         return render(
@@ -224,19 +201,18 @@ async def account_new_submit(request: Request, member_id: str):
             "account_new.html",
             member=member,
             account_type=account_type,
-            opening_amount=opening_amount or "0",
             errors=errors,
         )
 
     existing_ids = [row[0] for row in db.query(Account.id).all()]
-    account_id = _next_account_id(existing_ids, type_map[account_type])
+    account_id = next_account_id(existing_ids, type_map[account_type])
     account = Account(
         id=account_id,
         member_id=member.id,
         account_type=account_type,
         status="active",
         currency="USD",
-        balance_cents=opening_cents,
+        balance_cents=0,
     )
     db.add(account)
     db.flush()

@@ -10,6 +10,7 @@
 </nav>
 <section class="panel">
   <h1>Open account</h1>
+  <p class="lede">Open a checking or savings account. New accounts start at $0.00.</p>
   {% if errors %}
   <ul class="alert alert-error" role="alert">
     {% for error in errors %}<li>{{ error }}</li>{% endfor %}
@@ -22,12 +23,7 @@
       <select id="account_type" name="account_type">
         <option value="checking" {% if account_type == "checking" %}selected{% endif %}>Checking</option>
         <option value="savings" {% if account_type == "savings" %}selected{% endif %}>Savings</option>
-        <option value="loan" {% if account_type == "loan" %}selected{% endif %}>Loan</option>
       </select>
-    </div>
-    <div class="field">
-      <label for="opening_amount">Opening amount</label>
-      <input id="opening_amount" name="opening_amount" type="text" inputmode="decimal" value="{{ opening_amount }}">
     </div>
     <div class="filter-actions">
       <button type="submit">Open account</button>

@@ -42,3 +42,36 @@ def parse_amount_to_cents(raw: str) -> int:
     if cents != cents.to_integral_value():
         raise InvalidOperation("too many decimal places")
     return int(cents)
+
+
+def next_account_id(existing_ids: list[str], prefix: str) -> str:
+    max_suffix = 0
+    for account_id in existing_ids:
+        if not account_id.startswith(f"{prefix}-"):
+            continue
+        try:
+            max_suffix = max(max_suffix, int(account_id.split("-", 1)[1]))
+        except ValueError:
+            continue
+    return f"{prefix}-{max_suffix + 1:04d}"
+
+
+def apply_balance_delta(balance: int, account_type: str, direction: str, amount_cents: int) -> int:
+    """Apply a posted debit/credit using the same rules as seed data."""
+    if account_type == "loan":
+        return balance + amount_cents if direction == "debit" else balance - amount_cents
+    return balance + amount_cents if direction == "credit" else balance - amount_cents
+
+
+def next_transaction_id(existing_ids: list[str], account_id: str) -> str:
+    prefix = f"TX-{account_id}-"
+    max_suffix = 0
+    for txn_id in existing_ids:
+        if not txn_id.startswith(prefix):
+            continue
+        suffix = txn_id[len(prefix) :]
+        try:
+            max_suffix = max(max_suffix, int(suffix))
+        except ValueError:
+            continue
+    return f"{prefix}{max_suffix + 1:04d}"

@@ -5,11 +5,21 @@ from decimal import InvalidOperation
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
 
+from app.middleware import csrf_forbidden
 from app.models import Account, Transaction
+from app.security import require_csrf
 from app.templating import render
-from app.utils import PAGE_SIZE, parse_amount_to_cents, parse_date
+from app.utils import (
+    PAGE_SIZE,
+    apply_balance_delta,
+    next_transaction_id,
+    parse_amount_to_cents,
+    parse_date,
+    utcnow,
+)
 
 router = APIRouter()
 
@@ -17,6 +27,25 @@ router = APIRouter()
 def _filter_query_string(params: dict[str, str]) -> str:
     cleaned = {key: value for key, value in params.items() if value and key != "page"}
     return urlencode(cleaned)
+
+
+def _cheque_directions_for(account: Account) -> list[tuple[str, str]]:
+    if account.account_type == "loan":
+        return [("payment", "Payment (credit toward outstanding)")]
+    return [
+        ("deposit", "Deposit (credit)"),
+        ("withdrawal", "Withdrawal (debit)"),
+    ]
+
+
+def _cheque_direction_to_ledger(kind: str) -> tuple[str, str] | None:
+    """Map form direction to (ledger direction, description verb)."""
+    mapping = {
+        "deposit": ("credit", "deposit"),
+        "withdrawal": ("debit", "withdrawal"),
+        "payment": ("credit", "payment"),
+    }
+    return mapping.get(kind)
 
 
 @router.get("/accounts/{account_id}")
@@ -216,3 +245,134 @@ async def transaction_details(request: Request, transaction_id: str):
         return_to=return_to,
         can_add_note=transaction.account.status == "active",
     )
+
+
+@router.get("/accounts/{account_id}/cheques/new")
+async def cheque_new_form(request: Request, account_id: str):
+    db = request.state.db
+    account = db.get(Account, account_id)
+    if account is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Account not found",
+            message="No account exists with that ID.",
+        )
+    if account.status != "active":
+        return render(
+            request,
+            "error.html",
+            status_code=403,
+            title="Account is not active",
+            message="Cheques cannot be recorded on an inactive account.",
+        )
+    return render(
+        request,
+        "cheque_new.html",
+        account=account,
+        member=account.member,
+        cheque_number="",
+        amount="",
+        direction=_cheque_directions_for(account)[0][0],
+        directions=_cheque_directions_for(account),
+        errors=[],
+    )
+
+
+@router.post("/accounts/{account_id}/cheques/new")
+async def cheque_new_submit(request: Request, account_id: str):
+    db = request.state.db
+    account = db.get(Account, account_id)
+    if account is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Account not found",
+            message="No account exists with that ID.",
+        )
+    if account.status != "active":
+        return render(
+            request,
+            "error.html",
+            status_code=403,
+            title="Account is not active",
+            message="Cheques cannot be recorded on an inactive account.",
+        )
+
+    form = await request.form()
+    row = request.state.portal_session
+    if row is None or not require_csrf(request, row, form.get("csrf_token")):
+        return csrf_forbidden(request)
+
+    cheque_number = (form.get("cheque_number") or "").strip()
+    amount_raw = (form.get("amount") or "").strip()
+    direction_kind = (form.get("direction") or "").strip()
+    allowed = {value for value, _label in _cheque_directions_for(account)}
+    errors: list[str] = []
+    amount_cents = 0
+
+    if not cheque_number:
+        errors.append("Cheque number is required.")
+    if not amount_raw:
+        errors.append("Amount is required.")
+    else:
+        try:
+            amount_cents = parse_amount_to_cents(amount_raw)
+            if amount_cents <= 0:
+                errors.append("Amount must be greater than zero.")
+        except (InvalidOperation, ValueError):
+            errors.append("Enter a valid amount.")
+
+    ledger = _cheque_direction_to_ledger(direction_kind) if direction_kind in allowed else None
+    if ledger is None:
+        errors.append("Select a valid direction.")
+        direction_kind = _cheque_directions_for(account)[0][0]
+
+    if errors:
+        return render(
+            request,
+            "cheque_new.html",
+            account=account,
+            member=account.member,
+            cheque_number=cheque_number,
+            amount=amount_raw,
+            direction=direction_kind,
+            directions=_cheque_directions_for(account),
+            errors=errors,
+        )
+
+    ledger_direction, verb = ledger
+    proposed = apply_balance_delta(
+        account.balance_cents, account.account_type, ledger_direction, amount_cents
+    )
+    if account.account_type != "loan" and ledger_direction == "debit" and proposed < 0:
+        return render(
+            request,
+            "cheque_new.html",
+            account=account,
+            member=account.member,
+            cheque_number=cheque_number,
+            amount=amount_raw,
+            direction=direction_kind,
+            directions=_cheque_directions_for(account),
+            errors=["Withdrawal would make the balance negative."],
+        )
+
+    existing_ids = [row[0] for row in db.query(Transaction.id).all()]
+    txn_id = next_transaction_id(existing_ids, account.id)
+    transaction = Transaction(
+        id=txn_id,
+        account_id=account.id,
+        posted_on=utcnow().date(),
+        description=f"Cheque {verb} #{cheque_number}",
+        amount_cents=amount_cents,
+        direction=ledger_direction,
+        status="posted",
+        currency=account.currency,
+    )
+    account.balance_cents = proposed
+    db.add(transaction)
+    db.flush()
+    return RedirectResponse(f"/transactions/{transaction.id}", status_code=303)

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Open loan{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Home</a></li>
+    <li><span aria-current="page">Open loan</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Open loan</h1>
+  <p class="lede">Search for the member who will hold the new loan.</p>
+  {% if error %}
+  <p class="alert alert-error" role="alert">{{ error }}</p>
+  {% endif %}
+  <form method="get" action="/loans/new" class="search-form">
+    <div class="field">
+      <label for="q">Member ID or name</label>
+      <input id="q" name="q" type="search" value="{{ term }}" data-testid="loan-search-input">
+    </div>
+    <button type="submit" name="search" data-testid="loan-search-submit">Search</button>
+  </form>
+</section>
+{% if submitted and not error %}
+<section class="panel">
+  <h2>Results</h2>
+  {% if results %}
+  <p class="meta">{{ results|length }} member{% if results|length != 1 %}s{% endif %} found.</p>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Member ID</th>
+        <th scope="col">Name</th>
+        <th scope="col">Status</th>
+        <th scope="col">City</th>
+        <th scope="col">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for member in results %}
+      <tr data-testid="loan-member-row-{{ member.id }}">
+        <td>{{ member.id }}</td>
+        <td>{{ member.full_name }}</td>
+        <td><span class="badge badge-{{ member.status }}">{{ member.status }}</span></td>
+        <td>{{ member.city }}</td>
+        <td><a href="/loans/new/{{ member.id }}">Continue</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty" data-testid="loan-no-results">No members match that search.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

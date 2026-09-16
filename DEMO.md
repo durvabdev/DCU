@@ -29,6 +29,8 @@ Amounts are shown as currency (`$1,234.56`). IDs keep leading zeros.
 | `SV-5500` | David Kim (`005500`) savings account with **no transactions** |
 | `CK-4200` | Sofia Alvarez (`004200`) **inactive** checking account with historical transactions |
 
+From a member profile, **Open account** creates checking or savings at `$0.00`. From Home, **Open loan** searches for a member and records an outstanding balance. On an active account, **Record cheque** posts a cheque deposit, withdrawal, or loan payment.
+
 ## Amount filter (`LN-1001`)
 
 Use **Amount strictly greater than** `500` (or `500.00`).

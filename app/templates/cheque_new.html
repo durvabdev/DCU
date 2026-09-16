@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Record cheque{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/members">Member</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
+    <li><span aria-current="page">Record cheque</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Record cheque</h1>
+  <p class="lede">Post a cheque against {{ account.type_label }} {{ account.id }}.</p>
+  {% if errors %}
+  <ul class="alert alert-error" role="alert">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="/accounts/{{ account.id }}/cheques/new" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="cheque_number">Cheque number</label>
+      <input id="cheque_number" name="cheque_number" type="text" value="{{ cheque_number }}" required>
+    </div>
+    <div class="field">
+      <label for="amount">Amount</label>
+      <input id="amount" name="amount" type="text" inputmode="decimal" value="{{ amount }}" required>
+    </div>
+    <div class="field">
+      <label for="direction">Direction</label>
+      <select id="direction" name="direction">
+        {% for value, label in directions %}
+        <option value="{{ value }}" {% if direction == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="submit">Record cheque</button>
+      <a class="button-secondary" href="/accounts/{{ account.id }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

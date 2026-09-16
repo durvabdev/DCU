@@ -6,7 +6,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import Settings, get_settings
 from app.database import init_engine
 from app.middleware import NoStoreMiddleware, PortalMiddleware
-from app.routers import accounts, auth, members, notes, scenarios
+from app.routers import accounts, auth, loans, members, notes, scenarios
 from app.templating import BASE_DIR, render
 
 
@@ -26,6 +26,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(members.router)
+    app.include_router(loans.router)
     app.include_router(accounts.router)
     app.include_router(notes.router)
     app.include_router(scenarios.router)
