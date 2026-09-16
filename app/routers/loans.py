@@ -74,12 +74,18 @@ async def loan_new_form(request: Request, member_id: str):
             title="Member is not active",
             message="New loans can only be opened for active members.",
         )
+    opened = (request.query_params.get("opened") or "").strip()
+    flash = None
+    if opened:
+        flash = f"Account opened. {opened}"
     return render(
         request,
         "loan_new.html",
         member=member,
         outstanding_balance="",
         errors=[],
+        flash=flash,
+        opened=opened or None,
     )
 
 
@@ -142,8 +148,7 @@ async def loan_new_submit(request: Request, member_id: str):
     )
     db.add(account)
     db.flush()
-    flash = f"Account opened. {account.id}"
     return RedirectResponse(
-        f"/members/{member.id}?flash={quote(flash)}",
+        f"/loans/new/{member.id}?opened={quote(account.id)}",
         status_code=303,
     )

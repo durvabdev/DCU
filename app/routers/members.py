@@ -233,12 +233,18 @@ async def account_new_form(request: Request, member_id: str):
             title="Member is not active",
             message="New accounts can only be opened for active members.",
         )
+    opened = (request.query_params.get("opened") or "").strip()
+    flash = None
+    if opened:
+        flash = f"Account opened. {opened}"
     return render(
         request,
         "account_new.html",
         member=member,
         account_type="checking",
         errors=[],
+        flash=flash,
+        opened=opened or None,
     )
 
 
@@ -294,9 +300,8 @@ async def account_new_submit(request: Request, member_id: str):
     )
     db.add(account)
     db.flush()
-    flash = f"Account opened. {account.id}"
     return RedirectResponse(
-        f"/members/{member.id}?flash={quote(flash)}",
+        f"/members/{member.id}/accounts/new?opened={quote(account.id)}",
         status_code=303,
     )
 
