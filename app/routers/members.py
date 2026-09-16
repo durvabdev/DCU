@@ -294,7 +294,11 @@ async def account_new_submit(request: Request, member_id: str):
     )
     db.add(account)
     db.flush()
-    return RedirectResponse(f"/accounts/{account.id}", status_code=303)
+    flash = f"Account opened. {account.id}"
+    return RedirectResponse(
+        f"/members/{member.id}?flash={quote(flash)}",
+        status_code=303,
+    )
 
 
 @router.get("/members/{member_id}/cheque-books/new")

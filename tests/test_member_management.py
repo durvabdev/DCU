@@ -79,7 +79,14 @@ def test_open_account_creates_savings_account_at_zero(auth_client: TestClient):
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/accounts/SV-5501"
+    location = response.headers["location"]
+    assert location.startswith("/members/001234")
+    assert "flash=" in location
+
+    member_after = auth_client.get(location)
+    assert member_after.status_code == 200
+    assert 'class="alert alert-success"' in member_after.text
+    assert "Account opened. SV-5501" in member_after.text
 
     account = auth_client.get("/accounts/SV-5501")
     assert account.status_code == 200
@@ -158,7 +165,14 @@ def test_open_loan_for_marcus_chen(auth_client: TestClient):
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert response.headers["location"] == "/accounts/LN-6601"
+    location = response.headers["location"]
+    assert location.startswith("/members/002001")
+    assert "flash=" in location
+
+    member_after = auth_client.get(location)
+    assert member_after.status_code == 200
+    assert 'class="alert alert-success"' in member_after.text
+    assert "Account opened. LN-6601" in member_after.text
 
     account = auth_client.get("/accounts/LN-6601")
     assert account.status_code == 200

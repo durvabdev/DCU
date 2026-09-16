@@ -1,4 +1,5 @@
 from decimal import InvalidOperation
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
@@ -141,4 +142,8 @@ async def loan_new_submit(request: Request, member_id: str):
     )
     db.add(account)
     db.flush()
-    return RedirectResponse(f"/accounts/{account.id}", status_code=303)
+    flash = f"Account opened. {account.id}"
+    return RedirectResponse(
+        f"/members/{member.id}?flash={quote(flash)}",
+        status_code=303,
+    )
