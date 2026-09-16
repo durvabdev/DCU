@@ -5,19 +5,18 @@
   <ol>
     <li><a href="/members">Member</a></li>
     <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
-    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
     <li><span aria-current="page">Order cheque book</span></li>
   </ol>
 </nav>
 <section class="panel">
   <h1>Order cheque book</h1>
-  <p class="lede">Order a new cheque book for {{ account.type_label }} {{ account.id }}. The fee is debited from the selected deposit account.</p>
+  <p class="lede">Order a new cheque book for {{ member.full_name }}. The fee is debited from the selected deposit account.</p>
   {% if errors %}
   <ul class="alert alert-error" role="alert">
     {% for error in errors %}<li>{{ error }}</li>{% endfor %}
   </ul>
   {% endif %}
-  <form method="post" action="/accounts/{{ account.id }}/cheque-books/new" class="stack">
+  <form method="post" action="/members/{{ member.id }}/cheque-books/new" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
       <label for="book_type">Cheque book type</label>
@@ -39,7 +38,7 @@
     </div>
     <div class="filter-actions">
       <button type="submit">Order cheque book</button>
-      <a class="button-secondary" href="/accounts/{{ account.id }}">Cancel</a>
+      <a class="button-secondary" href="/members/{{ member.id }}">Cancel</a>
     </div>
   </form>
 </section>

@@ -8,17 +8,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
 
-from app.middleware import csrf_forbidden
 from app.models import Account, Transaction
-from app.security import require_csrf
 from app.templating import render
 from app.utils import (
     PAGE_SIZE,
-    apply_balance_delta,
-    next_transaction_id,
     parse_amount_to_cents,
     parse_date,
-    utcnow,
 )
 
 router = APIRouter()
@@ -27,63 +22,6 @@ router = APIRouter()
 def _filter_query_string(params: dict[str, str]) -> str:
     cleaned = {key: value for key, value in params.items() if value and key != "page"}
     return urlencode(cleaned)
-
-
-# Cheque book order catalog: type key → (label, pages, fee_cents).
-CHEQUE_BOOK_TYPES: dict[str, tuple[str, int, int]] = {
-    "standard": ("Standard", 25, 1500),
-    "business": ("Business", 50, 2500),
-    "premium": ("Premium", 100, 4000),
-}
-
-
-def _cheque_book_type_options() -> list[tuple[str, str]]:
-    options: list[tuple[str, str]] = []
-    for key, (label, pages, fee_cents) in CHEQUE_BOOK_TYPES.items():
-        dollars = fee_cents / 100
-        options.append((key, f"{label} — {pages} pages (${dollars:.2f})"))
-    return options
-
-
-def _fee_debit_accounts(db, member_id: str) -> list[Account]:
-    return (
-        db.query(Account)
-        .filter(
-            Account.member_id == member_id,
-            Account.status == "active",
-            Account.account_type.in_(("checking", "savings")),
-        )
-        .order_by(Account.id)
-        .all()
-    )
-
-
-def _cheque_book_forbidden(request: Request, account: Account | None):
-    if account is None:
-        return render(
-            request,
-            "error.html",
-            status_code=404,
-            title="Account not found",
-            message="No account exists with that ID.",
-        )
-    if account.account_type != "checking":
-        return render(
-            request,
-            "error.html",
-            status_code=403,
-            title="Cheque books unavailable",
-            message="Cheque books can only be ordered for checking accounts.",
-        )
-    if account.status != "active":
-        return render(
-            request,
-            "error.html",
-            status_code=403,
-            title="Account is not active",
-            message="Cheque books cannot be ordered on an inactive account.",
-        )
-    return None
 
 
 @router.get("/accounts/{account_id}")
@@ -283,107 +221,3 @@ async def transaction_details(request: Request, transaction_id: str):
         return_to=return_to,
         can_add_note=transaction.account.status == "active",
     )
-
-
-@router.get("/accounts/{account_id}/cheque-books/new")
-async def cheque_book_new_form(request: Request, account_id: str):
-    db = request.state.db
-    account = db.get(Account, account_id)
-    forbidden = _cheque_book_forbidden(request, account)
-    if forbidden is not None:
-        return forbidden
-
-    fee_accounts = _fee_debit_accounts(db, account.member_id)
-    return render(
-        request,
-        "cheque_book_new.html",
-        account=account,
-        member=account.member,
-        book_type="standard",
-        book_types=_cheque_book_type_options(),
-        fee_account_id=account.id,
-        fee_accounts=fee_accounts,
-        errors=[],
-    )
-
-
-@router.post("/accounts/{account_id}/cheque-books/new")
-async def cheque_book_new_submit(request: Request, account_id: str):
-    db = request.state.db
-    account = db.get(Account, account_id)
-    forbidden = _cheque_book_forbidden(request, account)
-    if forbidden is not None:
-        return forbidden
-
-    form = await request.form()
-    row = request.state.portal_session
-    if row is None or not require_csrf(request, row, form.get("csrf_token")):
-        return csrf_forbidden(request)
-
-    book_type = (form.get("book_type") or "").strip()
-    fee_account_id = (form.get("fee_account_id") or "").strip()
-    fee_accounts = _fee_debit_accounts(db, account.member_id)
-    fee_account_ids = {item.id for item in fee_accounts}
-    errors: list[str] = []
-
-    type_info = CHEQUE_BOOK_TYPES.get(book_type)
-    if type_info is None:
-        errors.append("Select a valid cheque book type.")
-        book_type = "standard"
-        type_info = CHEQUE_BOOK_TYPES[book_type]
-
-    fee_account = None
-    if fee_account_id not in fee_account_ids:
-        errors.append("Select a valid fee debit account.")
-        fee_account_id = account.id if account.id in fee_account_ids else (
-            fee_accounts[0].id if fee_accounts else ""
-        )
-    else:
-        fee_account = next(item for item in fee_accounts if item.id == fee_account_id)
-
-    if errors:
-        return render(
-            request,
-            "cheque_book_new.html",
-            account=account,
-            member=account.member,
-            book_type=book_type,
-            book_types=_cheque_book_type_options(),
-            fee_account_id=fee_account_id,
-            fee_accounts=fee_accounts,
-            errors=errors,
-        )
-
-    label, pages, fee_cents = type_info
-    proposed = apply_balance_delta(
-        fee_account.balance_cents, fee_account.account_type, "debit", fee_cents
-    )
-    if proposed < 0:
-        return render(
-            request,
-            "cheque_book_new.html",
-            account=account,
-            member=account.member,
-            book_type=book_type,
-            book_types=_cheque_book_type_options(),
-            fee_account_id=fee_account_id,
-            fee_accounts=fee_accounts,
-            errors=["Cheque book fee would make the fee account balance negative."],
-        )
-
-    existing_ids = [row[0] for row in db.query(Transaction.id).all()]
-    txn_id = next_transaction_id(existing_ids, fee_account.id)
-    transaction = Transaction(
-        id=txn_id,
-        account_id=fee_account.id,
-        posted_on=utcnow().date(),
-        description=f"Cheque issue — {label} ({pages} pages)",
-        amount_cents=fee_cents,
-        direction="debit",
-        status="posted",
-        currency=fee_account.currency,
-    )
-    fee_account.balance_cents = proposed
-    db.add(transaction)
-    db.flush()
-    return RedirectResponse(f"/transactions/{transaction.id}", status_code=303)
