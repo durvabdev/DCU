@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Order cheque book{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/members">Member</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
+    <li><span aria-current="page">Order cheque book</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Order cheque book</h1>
+  <p class="lede">Order a new cheque book for {{ account.type_label }} {{ account.id }}. The fee is debited from the selected deposit account.</p>
+  {% if errors %}
+  <ul class="alert alert-error" role="alert">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="/accounts/{{ account.id }}/cheque-books/new" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="book_type">Cheque book type</label>
+      <select id="book_type" name="book_type" required>
+        {% for value, label in book_types %}
+        <option value="{{ value }}" {% if book_type == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="fee_account_id">Fee debit account</label>
+      <select id="fee_account_id" name="fee_account_id" required>
+        {% for fee_account in fee_accounts %}
+        <option value="{{ fee_account.id }}" {% if fee_account_id == fee_account.id %}selected{% endif %}>
+          {{ fee_account.type_label }} {{ fee_account.id }} ({{ fee_account.balance_cents | money }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-actions">
+      <button type="submit">Order cheque book</button>
+      <a class="button-secondary" href="/accounts/{{ account.id }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

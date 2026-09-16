@@ -251,17 +251,37 @@ h2 { margin: 0 0 0.75rem; font-size: 1.55rem; }
   align-items: end;
   gap: 0.75rem;
 }
-.search-form .field { flex: 1 1 16rem; }
+.search-form .field { flex: 1 1 16rem; min-width: 0; }
+.search-form .field input,
+.search-form .field select { width: 100%; max-width: 100%; min-width: 0; }
 .search-form button { flex: 0 0 auto; min-width: 8rem; }
 .filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem 1rem;
   align-items: end;
+}
+.filters > .field {
+  min-width: 0;
+}
+.filters > .field input,
+.filters > .field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.filters > .filter-actions {
+  grid-column: 1 / -1;
 }
 .filter-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
 
-.field { display: grid; gap: 0.3rem; }
+.field { display: grid; gap: 0.3rem; min-width: 0; }
+.field input,
+.field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
 label { font-size: 0.92rem; font-weight: 700; }
 input, select, textarea, button {
   font: inherit;
@@ -417,4 +437,7 @@ th {
   .header-clock { display: none; }
   table { font-size: 0.88rem; }
   h1 { font-size: 1.7rem; }
+  .filters {
+    grid-template-columns: 1fr;
+  }
 }

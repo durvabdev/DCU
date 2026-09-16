@@ -29,7 +29,7 @@ Amounts are shown as currency (`$1,234.56`). IDs keep leading zeros.
 | `SV-5500` | David Kim (`005500`) savings account with **no transactions** |
 | `CK-4200` | Sofia Alvarez (`004200`) **inactive** checking account with historical transactions |
 
-From a member profile, **Open account** creates checking or savings at `$0.00`. From Home, **Open loan** searches for a member and records an outstanding balance. On an active account, **Record cheque** posts a cheque deposit, withdrawal, or loan payment.
+From a member profile, **Open account** creates checking or savings at `$0.00`. From Home, **Open loan** searches for a member and records an outstanding balance. On an **active checking** account, **Order cheque book** debits a fee from a chosen checking/savings account and posts a `Cheque issue` transaction. Types: Standard (25 pages, $15), Business (50 pages, $25), Premium (100 pages, $40).
 
 ## Amount filter (`LN-1001`)
 

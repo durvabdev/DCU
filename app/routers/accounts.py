@@ -29,23 +29,61 @@ def _filter_query_string(params: dict[str, str]) -> str:
     return urlencode(cleaned)
 
 
-def _cheque_directions_for(account: Account) -> list[tuple[str, str]]:
-    if account.account_type == "loan":
-        return [("payment", "Payment (credit toward outstanding)")]
-    return [
-        ("deposit", "Deposit (credit)"),
-        ("withdrawal", "Withdrawal (debit)"),
-    ]
+# Cheque book order catalog: type key → (label, pages, fee_cents).
+CHEQUE_BOOK_TYPES: dict[str, tuple[str, int, int]] = {
+    "standard": ("Standard", 25, 1500),
+    "business": ("Business", 50, 2500),
+    "premium": ("Premium", 100, 4000),
+}
 
 
-def _cheque_direction_to_ledger(kind: str) -> tuple[str, str] | None:
-    """Map form direction to (ledger direction, description verb)."""
-    mapping = {
-        "deposit": ("credit", "deposit"),
-        "withdrawal": ("debit", "withdrawal"),
-        "payment": ("credit", "payment"),
-    }
-    return mapping.get(kind)
+def _cheque_book_type_options() -> list[tuple[str, str]]:
+    options: list[tuple[str, str]] = []
+    for key, (label, pages, fee_cents) in CHEQUE_BOOK_TYPES.items():
+        dollars = fee_cents / 100
+        options.append((key, f"{label} — {pages} pages (${dollars:.2f})"))
+    return options
+
+
+def _fee_debit_accounts(db, member_id: str) -> list[Account]:
+    return (
+        db.query(Account)
+        .filter(
+            Account.member_id == member_id,
+            Account.status == "active",
+            Account.account_type.in_(("checking", "savings")),
+        )
+        .order_by(Account.id)
+        .all()
+    )
+
+
+def _cheque_book_forbidden(request: Request, account: Account | None):
+    if account is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Account not found",
+            message="No account exists with that ID.",
+        )
+    if account.account_type != "checking":
+        return render(
+            request,
+            "error.html",
+            status_code=403,
+            title="Cheque books unavailable",
+            message="Cheque books can only be ordered for checking accounts.",
+        )
+    if account.status != "active":
+        return render(
+            request,
+            "error.html",
+            status_code=403,
+            title="Account is not active",
+            message="Cheque books cannot be ordered on an inactive account.",
+        )
+    return None
 
 
 @router.get("/accounts/{account_id}")
@@ -247,132 +285,105 @@ async def transaction_details(request: Request, transaction_id: str):
     )
 
 
-@router.get("/accounts/{account_id}/cheques/new")
-async def cheque_new_form(request: Request, account_id: str):
+@router.get("/accounts/{account_id}/cheque-books/new")
+async def cheque_book_new_form(request: Request, account_id: str):
     db = request.state.db
     account = db.get(Account, account_id)
-    if account is None:
-        return render(
-            request,
-            "error.html",
-            status_code=404,
-            title="Account not found",
-            message="No account exists with that ID.",
-        )
-    if account.status != "active":
-        return render(
-            request,
-            "error.html",
-            status_code=403,
-            title="Account is not active",
-            message="Cheques cannot be recorded on an inactive account.",
-        )
+    forbidden = _cheque_book_forbidden(request, account)
+    if forbidden is not None:
+        return forbidden
+
+    fee_accounts = _fee_debit_accounts(db, account.member_id)
     return render(
         request,
-        "cheque_new.html",
+        "cheque_book_new.html",
         account=account,
         member=account.member,
-        cheque_number="",
-        amount="",
-        direction=_cheque_directions_for(account)[0][0],
-        directions=_cheque_directions_for(account),
+        book_type="standard",
+        book_types=_cheque_book_type_options(),
+        fee_account_id=account.id,
+        fee_accounts=fee_accounts,
         errors=[],
     )
 
 
-@router.post("/accounts/{account_id}/cheques/new")
-async def cheque_new_submit(request: Request, account_id: str):
+@router.post("/accounts/{account_id}/cheque-books/new")
+async def cheque_book_new_submit(request: Request, account_id: str):
     db = request.state.db
     account = db.get(Account, account_id)
-    if account is None:
-        return render(
-            request,
-            "error.html",
-            status_code=404,
-            title="Account not found",
-            message="No account exists with that ID.",
-        )
-    if account.status != "active":
-        return render(
-            request,
-            "error.html",
-            status_code=403,
-            title="Account is not active",
-            message="Cheques cannot be recorded on an inactive account.",
-        )
+    forbidden = _cheque_book_forbidden(request, account)
+    if forbidden is not None:
+        return forbidden
 
     form = await request.form()
     row = request.state.portal_session
     if row is None or not require_csrf(request, row, form.get("csrf_token")):
         return csrf_forbidden(request)
 
-    cheque_number = (form.get("cheque_number") or "").strip()
-    amount_raw = (form.get("amount") or "").strip()
-    direction_kind = (form.get("direction") or "").strip()
-    allowed = {value for value, _label in _cheque_directions_for(account)}
+    book_type = (form.get("book_type") or "").strip()
+    fee_account_id = (form.get("fee_account_id") or "").strip()
+    fee_accounts = _fee_debit_accounts(db, account.member_id)
+    fee_account_ids = {item.id for item in fee_accounts}
     errors: list[str] = []
-    amount_cents = 0
 
-    if not cheque_number:
-        errors.append("Cheque number is required.")
-    if not amount_raw:
-        errors.append("Amount is required.")
+    type_info = CHEQUE_BOOK_TYPES.get(book_type)
+    if type_info is None:
+        errors.append("Select a valid cheque book type.")
+        book_type = "standard"
+        type_info = CHEQUE_BOOK_TYPES[book_type]
+
+    fee_account = None
+    if fee_account_id not in fee_account_ids:
+        errors.append("Select a valid fee debit account.")
+        fee_account_id = account.id if account.id in fee_account_ids else (
+            fee_accounts[0].id if fee_accounts else ""
+        )
     else:
-        try:
-            amount_cents = parse_amount_to_cents(amount_raw)
-            if amount_cents <= 0:
-                errors.append("Amount must be greater than zero.")
-        except (InvalidOperation, ValueError):
-            errors.append("Enter a valid amount.")
-
-    ledger = _cheque_direction_to_ledger(direction_kind) if direction_kind in allowed else None
-    if ledger is None:
-        errors.append("Select a valid direction.")
-        direction_kind = _cheque_directions_for(account)[0][0]
+        fee_account = next(item for item in fee_accounts if item.id == fee_account_id)
 
     if errors:
         return render(
             request,
-            "cheque_new.html",
+            "cheque_book_new.html",
             account=account,
             member=account.member,
-            cheque_number=cheque_number,
-            amount=amount_raw,
-            direction=direction_kind,
-            directions=_cheque_directions_for(account),
+            book_type=book_type,
+            book_types=_cheque_book_type_options(),
+            fee_account_id=fee_account_id,
+            fee_accounts=fee_accounts,
             errors=errors,
         )
 
-    ledger_direction, verb = ledger
+    label, pages, fee_cents = type_info
     proposed = apply_balance_delta(
-        account.balance_cents, account.account_type, ledger_direction, amount_cents
+        fee_account.balance_cents, fee_account.account_type, "debit", fee_cents
     )
-    if account.account_type != "loan" and ledger_direction == "debit" and proposed < 0:
+    if proposed < 0:
         return render(
             request,
-            "cheque_new.html",
+            "cheque_book_new.html",
             account=account,
             member=account.member,
-            cheque_number=cheque_number,
-            amount=amount_raw,
-            direction=direction_kind,
-            directions=_cheque_directions_for(account),
-            errors=["Withdrawal would make the balance negative."],
+            book_type=book_type,
+            book_types=_cheque_book_type_options(),
+            fee_account_id=fee_account_id,
+            fee_accounts=fee_accounts,
+            errors=["Cheque book fee would make the fee account balance negative."],
         )
 
     existing_ids = [row[0] for row in db.query(Transaction.id).all()]
-    txn_id = next_transaction_id(existing_ids, account.id)
+    txn_id = next_transaction_id(existing_ids, fee_account.id)
     transaction = Transaction(
         id=txn_id,
-        account_id=account.id,
+        account_id=fee_account.id,
         posted_on=utcnow().date(),
-        description=f"Cheque {verb} #{cheque_number}",
-        amount_cents=amount_cents,
-        direction=ledger_direction,
+        description=f"Cheque issue — {label} ({pages} pages)",
+        amount_cents=fee_cents,
+        direction="debit",
         status="posted",
-        currency=account.currency,
+        currency=fee_account.currency,
     )
-    account.balance_cents = proposed
+    fee_account.balance_cents = proposed
     db.add(transaction)
     db.flush()
     return RedirectResponse(f"/transactions/{transaction.id}", status_code=303)
