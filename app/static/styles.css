@@ -276,6 +276,10 @@ h2 { margin: 0 0 0.75rem; font-size: 1.55rem; }
 .filter-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
 
 .field { display: grid; gap: 0.3rem; min-width: 0; }
+.field[hidden],
+[data-method-field][hidden] {
+  display: none !important;
+}
 .field input,
 .field select {
   width: 100%;
