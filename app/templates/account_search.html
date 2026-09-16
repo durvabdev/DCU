@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Home</a></li>
+    <li><span aria-current="page">Account</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Account</h1>
+  <p class="lede">Look up an account by exact or partial account ID.</p>
+  {% if error %}
+  <p class="alert alert-error" role="alert">{{ error }}</p>
+  {% endif %}
+  <form method="get" action="/accounts" class="search-form">
+    <div class="field">
+      <label for="q">Account ID</label>
+      <input id="q" name="q" type="search" value="{{ term }}" data-testid="search-input" placeholder="e.g. CK-1001">
+    </div>
+    <button type="submit" name="search" data-testid="search-submit">Search</button>
+  </form>
+</section>
+{% if submitted and not error %}
+<section class="panel">
+  <h2>Results</h2>
+  {% if results %}
+  <p class="meta">{{ results|length }} account{% if results|length != 1 %}s{% endif %} found.</p>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Account ID</th>
+        <th scope="col">Type</th>
+        <th scope="col">Status</th>
+        <th scope="col">Member</th>
+        <th scope="col">Balance</th>
+        <th scope="col">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for account in results %}
+      <tr data-testid="account-row-{{ account.id }}">
+        <td>{{ account.id }}</td>
+        <td>{{ account.type_label }}</td>
+        <td><span class="badge badge-{{ account.status }}">{{ account.status }}</span></td>
+        <td>{{ account.member.full_name }} ({{ account.member_id }})</td>
+        <td>
+          <span class="balance-label">{{ account.balance_label }}</span>
+          {{ account.balance_cents | money }}
+        </td>
+        <td><a href="/accounts/{{ account.id }}">View Account</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty" data-testid="no-results">No accounts match that search.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

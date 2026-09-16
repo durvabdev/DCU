@@ -39,6 +39,9 @@
         <li>
           <a href="/members"{% if request.url.path.startswith("/members") %} aria-current="page"{% endif %}>Member</a>
         </li>
+        <li>
+          <a href="/accounts"{% if request.url.path.startswith("/accounts") %} aria-current="page"{% endif %}>Account</a>
+        </li>
       </ul>
     </nav>
     {% endif %}

@@ -2,17 +2,25 @@ from __future__ import annotations
 
 import asyncio
 from decimal import InvalidOperation
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 
+from app.middleware import csrf_forbidden
 from app.models import Account, Transaction
+from app.security import require_csrf
 from app.templating import render
 from app.utils import (
     PAGE_SIZE,
+    apply_balance_delta,
+    format_money,
+    next_transaction_id,
     parse_amount_to_cents,
     parse_date,
+    utcnow,
 )
 
 router = APIRouter()
@@ -23,18 +31,168 @@ def _filter_query_string(params: dict[str, str]) -> str:
     return urlencode(cleaned)
 
 
+def _account_not_found(request: Request):
+    return render(
+        request,
+        "error.html",
+        status_code=404,
+        title="Account not found",
+        message="No account exists with that ID.",
+    )
+
+
+def _account_inactive_forbidden(request: Request):
+    return render(
+        request,
+        "error.html",
+        status_code=403,
+        title="Account is not active",
+        message="Credits and debits can only be posted on active accounts.",
+    )
+
+
+def _load_account(db, account_id: str) -> Account | None:
+    return (
+        db.query(Account)
+        .options(joinedload(Account.member))
+        .filter(Account.id == account_id)
+        .one_or_none()
+    )
+
+
+def _is_deposit(account: Account) -> bool:
+    return account.account_type in {"checking", "savings"}
+
+
+def _would_overdraft(account: Account, direction: str, amount_cents: int) -> bool:
+    if not _is_deposit(account) or direction != "debit":
+        return False
+    proposed = apply_balance_delta(
+        account.balance_cents, account.account_type, direction, amount_cents
+    )
+    return proposed < 0
+
+
+def _post_leg(
+    db,
+    account: Account,
+    *,
+    direction: str,
+    amount_cents: int,
+    description: str,
+    existing_ids: list[str],
+) -> Transaction:
+    txn_id = next_transaction_id(existing_ids, account.id)
+    existing_ids.append(txn_id)
+    transaction = Transaction(
+        id=txn_id,
+        account_id=account.id,
+        posted_on=utcnow().date(),
+        description=description,
+        amount_cents=amount_cents,
+        direction=direction,
+        status="posted",
+        currency=account.currency,
+    )
+    account.balance_cents = apply_balance_delta(
+        account.balance_cents, account.account_type, direction, amount_cents
+    )
+    db.add(transaction)
+    return transaction
+
+
+def _render_adjust_form(
+    request: Request,
+    *,
+    account: Account,
+    operation: str,
+    method: str = "cheque",
+    cheque_number: str = "",
+    amount: str = "",
+    counterparty_id: str = "",
+    errors: list[str] | None = None,
+):
+    return render(
+        request,
+        "account_adjust.html",
+        account=account,
+        member=account.member,
+        operation=operation,
+        method=method,
+        cheque_number=cheque_number,
+        amount=amount,
+        counterparty_id=counterparty_id,
+        errors=errors or [],
+    )
+
+
+def _parse_adjust_form(form) -> tuple[str, str, str, str, list[str], int | None]:
+    method = (form.get("method") or "").strip()
+    cheque_number = (form.get("cheque_number") or "").strip()
+    amount_raw = (form.get("amount") or "").strip()
+    counterparty_id = (form.get("counterparty_id") or "").strip()
+    errors: list[str] = []
+    amount_cents: int | None = None
+
+    if method not in {"cheque", "transfer"}:
+        errors.append("Select cheque or transfer.")
+        method = "cheque"
+
+    if not amount_raw:
+        errors.append("Amount is required.")
+    else:
+        try:
+            amount_cents = parse_amount_to_cents(amount_raw)
+            if amount_cents <= 0:
+                errors.append("Amount must be greater than zero.")
+                amount_cents = None
+        except (InvalidOperation, ValueError):
+            errors.append("Enter a valid amount.")
+
+    if method == "cheque":
+        if not cheque_number:
+            errors.append("Cheque number is required.")
+    elif method == "transfer":
+        if not counterparty_id:
+            errors.append("Counterparty account ID is required.")
+
+    return method, cheque_number, amount_raw, counterparty_id, errors, amount_cents
+
+
+@router.get("/accounts")
+async def account_search(request: Request):
+    db = request.state.db
+    submitted = "q" in request.query_params
+    term = (request.query_params.get("q") or "").strip()
+    error = None
+    results: list[Account] = []
+    if submitted and not term:
+        error = "Enter an account ID to search."
+    elif submitted:
+        like = f"%{term}%"
+        results = (
+            db.query(Account)
+            .options(joinedload(Account.member))
+            .filter(or_(Account.id == term, Account.id.ilike(like)))
+            .order_by(Account.id)
+            .all()
+        )
+    return render(
+        request,
+        "account_search.html",
+        term=term,
+        submitted=submitted,
+        error=error,
+        results=results,
+    )
+
+
 @router.get("/accounts/{account_id}")
 async def account_details(request: Request, account_id: str):
     db = request.state.db
     account = db.get(Account, account_id)
     if account is None:
-        return render(
-            request,
-            "error.html",
-            status_code=404,
-            title="Account not found",
-            message="No account exists with that ID.",
-        )
+        return _account_not_found(request)
 
     flags = request.state.flags
     session_row = request.state.portal_session
@@ -125,6 +283,7 @@ async def account_details(request: Request, account_id: str):
             filter_query="",
             range_start=0,
             range_end=0,
+            flash=None,
         )
 
     query = db.query(Transaction).filter(Transaction.account_id == account.id)
@@ -193,6 +352,176 @@ async def account_details(request: Request, account_id: str):
         filter_query=filter_query,
         range_start=range_start,
         range_end=range_end,
+        flash=request.query_params.get("flash"),
+    )
+
+
+@router.get("/accounts/{account_id}/credit")
+async def account_credit_form(request: Request, account_id: str):
+    account = _load_account(request.state.db, account_id)
+    if account is None:
+        return _account_not_found(request)
+    if account.status != "active":
+        return _account_inactive_forbidden(request)
+    return _render_adjust_form(request, account=account, operation="credit")
+
+
+@router.post("/accounts/{account_id}/credit")
+async def account_credit_submit(request: Request, account_id: str):
+    return await _submit_adjust(request, account_id, operation="credit")
+
+
+@router.get("/accounts/{account_id}/debit")
+async def account_debit_form(request: Request, account_id: str):
+    account = _load_account(request.state.db, account_id)
+    if account is None:
+        return _account_not_found(request)
+    if account.status != "active":
+        return _account_inactive_forbidden(request)
+    return _render_adjust_form(request, account=account, operation="debit")
+
+
+@router.post("/accounts/{account_id}/debit")
+async def account_debit_submit(request: Request, account_id: str):
+    return await _submit_adjust(request, account_id, operation="debit")
+
+
+async def _submit_adjust(request: Request, account_id: str, *, operation: str):
+    db = request.state.db
+    account = _load_account(db, account_id)
+    if account is None:
+        return _account_not_found(request)
+    if account.status != "active":
+        return _account_inactive_forbidden(request)
+
+    form = await request.form()
+    row = request.state.portal_session
+    if row is None or not require_csrf(request, row, form.get("csrf_token")):
+        return csrf_forbidden(request)
+
+    method, cheque_number, amount_raw, counterparty_id, errors, amount_cents = _parse_adjust_form(
+        form
+    )
+    if errors or amount_cents is None:
+        return _render_adjust_form(
+            request,
+            account=account,
+            operation=operation,
+            method=method,
+            cheque_number=cheque_number,
+            amount=amount_raw,
+            counterparty_id=counterparty_id,
+            errors=errors,
+        )
+
+    primary_direction = operation  # "credit" or "debit"
+    existing_ids = [row[0] for row in db.query(Transaction.id).all()]
+
+    if method == "cheque":
+        if _would_overdraft(account, primary_direction, amount_cents):
+            return _render_adjust_form(
+                request,
+                account=account,
+                operation=operation,
+                method=method,
+                cheque_number=cheque_number,
+                amount=amount_raw,
+                counterparty_id=counterparty_id,
+                errors=["This debit would make the account balance negative."],
+            )
+        description = f"Cheque {primary_direction} #{cheque_number}"
+        txn = _post_leg(
+            db,
+            account,
+            direction=primary_direction,
+            amount_cents=amount_cents,
+            description=description,
+            existing_ids=existing_ids,
+        )
+        db.flush()
+        verb = "Credited" if operation == "credit" else "Debited"
+        flash = f"{verb} {format_money(amount_cents)}. {txn.id}"
+        return RedirectResponse(
+            f"/accounts/{account.id}?flash={quote(flash)}",
+            status_code=303,
+        )
+
+    # Transfer
+    if counterparty_id == account.id:
+        return _render_adjust_form(
+            request,
+            account=account,
+            operation=operation,
+            method=method,
+            cheque_number=cheque_number,
+            amount=amount_raw,
+            counterparty_id=counterparty_id,
+            errors=["Counterparty account must be different from this account."],
+        )
+
+    other = db.get(Account, counterparty_id)
+    if other is None:
+        return _render_adjust_form(
+            request,
+            account=account,
+            operation=operation,
+            method=method,
+            cheque_number=cheque_number,
+            amount=amount_raw,
+            counterparty_id=counterparty_id,
+            errors=["No account exists with that counterparty ID."],
+        )
+
+    if operation == "credit":
+        # Money from other → debit other, credit this
+        debit_account, credit_account = other, account
+    else:
+        # Money to other → debit this, credit other
+        debit_account, credit_account = account, other
+
+    if _would_overdraft(debit_account, "debit", amount_cents):
+        whose = (
+            "this account"
+            if debit_account.id == account.id
+            else f"counterparty account {debit_account.id}"
+        )
+        return _render_adjust_form(
+            request,
+            account=account,
+            operation=operation,
+            method=method,
+            cheque_number=cheque_number,
+            amount=amount_raw,
+            counterparty_id=counterparty_id,
+            errors=[f"This transfer would make {whose} balance negative."],
+        )
+
+    debit_txn = _post_leg(
+        db,
+        debit_account,
+        direction="debit",
+        amount_cents=amount_cents,
+        description=f"Transfer to {credit_account.id}",
+        existing_ids=existing_ids,
+    )
+    credit_txn = _post_leg(
+        db,
+        credit_account,
+        direction="credit",
+        amount_cents=amount_cents,
+        description=f"Transfer from {debit_account.id}",
+        existing_ids=existing_ids,
+    )
+    db.flush()
+
+    verb = "Credited" if operation == "credit" else "Debited"
+    flash = (
+        f"{verb} {format_money(amount_cents)} via transfer "
+        f"({debit_txn.id} / {credit_txn.id})."
+    )
+    return RedirectResponse(
+        f"/accounts/{account.id}?flash={quote(flash)}",
+        status_code=303,
     )
 
 

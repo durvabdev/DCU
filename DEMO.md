@@ -31,6 +31,8 @@ Amounts are shown as currency (`$1,234.56`). IDs keep leading zeros.
 
 From a member profile, **Open account** creates checking or savings at `$0.00`; success returns to the member profile with an acknowledgement that includes the new account ID. From Home, **Open loan** searches for a member and records an outstanding balance; success likewise returns to the member profile with the new account ID. From a member profile, **Order cheque book** (active members with an active checking account) debits a fee from a chosen checking/savings account and posts a `Cheque issue` transaction; success returns to the member profile with a debit acknowledgement. Types: Standard (25 pages, $15), Business (50 pages, $25), Premium (100 pages, $40).
 
+On an **active** account page, **Credit** and **Debit** post by cheque (cheque number + amount) or transfer (counterparty account ID + amount). Cheque posts one transaction on that account; transfer posts a matching debit and credit on both sides. Deposit-account debits that would overdraft are rejected. Success returns to the account page with a flash that includes the new transaction ID(s). Use **Account** in the blue nav (or **Account lookup** on Home) at `/accounts` to find an account by ID without going through the member first.
+
 ## Amount filter (`LN-1001`)
 
 Use **Amount strictly greater than** `500` (or `500.00`).

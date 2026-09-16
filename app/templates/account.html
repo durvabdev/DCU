@@ -10,6 +10,9 @@
 </nav>
 <section class="panel">
   <h1>{{ account.type_label }} {{ account.id }}</h1>
+  {% if flash %}
+  <p class="alert alert-success" role="status">{{ flash }}</p>
+  {% endif %}
   <dl class="facts">
     <div><dt>Owner ID</dt><dd>{{ member.id }}</dd></div>
     <div><dt>Owner name</dt><dd>{{ member.full_name }}</dd></div>
@@ -20,6 +23,12 @@
       <dd>{{ account.balance_cents | money }}</dd>
     </div>
   </dl>
+  {% if account.status == "active" %}
+  <div class="filter-actions">
+    <a class="button" href="/accounts/{{ account.id }}/credit">Credit</a>
+    <a class="button-secondary" href="/accounts/{{ account.id }}/debit">Debit</a>
+  </div>
+  {% endif %}
 </section>
 <section class="panel">
   <h2>Transactions</h2>
