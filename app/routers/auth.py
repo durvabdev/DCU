@@ -33,7 +33,7 @@ async def login_form(request: Request):
         error=None,
         next_url=request.query_params.get("next") or "/",
     )
-    set_session_cookie(response, row.id, settings)
+    set_session_cookie(response, row, settings)
     return response
 
 
@@ -61,7 +61,7 @@ async def login_submit(request: Request):
             error="The username or password is incorrect.",
             next_url=next_url,
         )
-        set_session_cookie(response, row.id, settings)
+        set_session_cookie(response, row, settings)
         return response
 
     row.employee_id = employee.id
@@ -71,7 +71,7 @@ async def login_submit(request: Request):
     request.state.employee = employee
     request.state.csrf_token = row.csrf_token
     response = RedirectResponse(next_url, status_code=303)
-    set_session_cookie(response, row.id, settings)
+    set_session_cookie(response, row, settings)
     return response
 
 
@@ -83,6 +83,8 @@ async def logout(request: Request):
     if row is None or not require_csrf(request, row, form.get("csrf_token")):
         return csrf_forbidden(request)
     invalidate_session(db, row)
+    request.state.portal_session = None
+    request.state.employee = None
     response = RedirectResponse("/login", status_code=303)
     from app.security import clear_session_cookie
 

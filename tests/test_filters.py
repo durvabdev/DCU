@@ -56,6 +56,21 @@ def test_non_numeric_amount_is_rejected(auth_client: TestClient):
     assert "Enter a valid amount." in response.text
 
 
+def test_transaction_keyword_search_matches_description_and_id(auth_client: TestClient):
+    by_description = auth_client.get("/accounts/LN-1001", params={"q": "FIXTURE"})
+    assert "TX-LN-1001-F02" in by_description.text
+    assert "FIXTURE exact $500.00" in by_description.text
+
+    by_id = auth_client.get("/accounts/LN-1001", params={"q": "TX-LN-1001-F03"})
+    assert "TX-LN-1001-F03" in by_id.text
+    assert "TX-LN-1001-F02" not in by_id.text
+
+
+def test_transaction_keyword_search_no_results(auth_client: TestClient):
+    response = auth_client.get("/accounts/LN-1001", params={"q": "zzz-no-match"})
+    assert "No transactions match the selected filters." in response.text
+
+
 def test_pagination_keeps_ten_rows_and_preserves_filters(auth_client: TestClient):
     page1 = auth_client.get("/accounts/CK-1001")
     assert "Showing 1–10 of 620 transactions." in page1.text
@@ -65,10 +80,12 @@ def test_pagination_keeps_ten_rows_and_preserves_filters(auth_client: TestClient
 
     filtered = auth_client.get(
         "/accounts/LN-1001",
-        params={"start_date": "2026-01-20", "end_date": "2026-01-20"},
+        params={"start_date": "2026-01-20", "end_date": "2026-01-20", "q": "FIXTURE"},
     )
     assert 'id="start_date"' in filtered.text
     assert 'value="2026-01-20"' in filtered.text
+    assert 'name="q"' in filtered.text
+    assert 'value="FIXTURE"' in filtered.text
     assert "View Transaction" in filtered.text
 
 

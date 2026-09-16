@@ -9,4 +9,6 @@ htmlcov/
 .env
 bank.db
 *.db
+data/vercel-seed.sqlite
+.vercel
 .DS_Store

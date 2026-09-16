@@ -10,6 +10,7 @@ from app.security import (
     invalidate_session,
     load_flags,
     redirect_to_login,
+    set_session_cookie,
 )
 from app.templating import render
 
@@ -78,6 +79,8 @@ class PortalMiddleware(BaseHTTPMiddleware):
                 return redirect_to_login(request)
 
             response = await call_next(request)
+            if request.state.portal_session is not None:
+                set_session_cookie(response, request.state.portal_session, settings)
             db.commit()
             return response
         except Exception:

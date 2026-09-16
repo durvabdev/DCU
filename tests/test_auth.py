@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.models import PortalSession
 from tests.conftest import extract_csrf, login
 
 
@@ -38,6 +39,22 @@ def test_teller_details_page(auth_client: TestClient):
     assert "<h1>Jordan Patel</h1>" in response.text
     assert 'href="/teller"' in response.text
     assert "teller (T-1001)" in response.text
+
+
+def test_login_survives_missing_session_row(auth_client: TestClient):
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        db.query(PortalSession).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    response = auth_client.get("/", follow_redirects=False)
+    assert response.status_code == 200
+    assert "Jordan Patel" in response.text
+    assert "Home" in response.text
 
 
 def test_protected_route_redirects_when_anonymous(client: TestClient):

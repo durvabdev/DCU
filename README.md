@@ -21,6 +21,22 @@ uvicorn app.main:app --reload
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
+## Deploy on Vercel
+
+GitHub stores the code; Vercel runs it as one Python function. A private GitHub repo works if you import it while logged into Vercel (the repo does not need to be public).
+
+```bash
+npx vercel@latest login
+npx vercel@latest --prod
+```
+
+In the Vercel project, set:
+
+- `SESSION_SECRET` — a long random string (required)
+- `DEV_SCENARIOS_ENABLED` — `true` if you want `/dev/scenarios`
+
+SQLite cannot persist on Vercel’s serverless filesystem. The build seeds a snapshot, and each function instance copies it to `/tmp`. Logins, notes, and scenario flags can reset when that instance is replaced. This is a demo host, not a durable database.
+
 Employee usernames and passwords are printed **only** by the seed command in your terminal. They are not listed in this repository's documentation. Re-run `python -m app.seed` if you need them printed again.
 
 ## Configuration

@@ -5,6 +5,7 @@ from decimal import InvalidOperation
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
+from sqlalchemy import or_
 
 from app.models import Account, Transaction
 from app.templating import render
@@ -48,6 +49,7 @@ async def account_details(request: Request, account_id: str):
     start_raw = (request.query_params.get("start_date") or "").strip()
     end_raw = (request.query_params.get("end_date") or "").strip()
     min_amount_raw = (request.query_params.get("min_amount") or "").strip()
+    q_raw = (request.query_params.get("q") or "").strip()
     direction = (request.query_params.get("direction") or "all").strip() or "all"
     page_raw = request.query_params.get("page") or "1"
 
@@ -84,6 +86,7 @@ async def account_details(request: Request, account_id: str):
             "start_date": start_raw,
             "end_date": end_raw,
             "min_amount": min_amount_raw,
+            "q": q_raw,
             "direction": direction if direction != "all" else "",
             "page": str(page) if page > 1 else "",
         }
@@ -108,6 +111,7 @@ async def account_details(request: Request, account_id: str):
             start_date=start_raw,
             end_date=end_raw,
             min_amount=min_amount_raw,
+            q=q_raw,
             direction=direction,
             transactions=[],
             total=0,
@@ -127,6 +131,14 @@ async def account_details(request: Request, account_id: str):
             query = query.filter(Transaction.posted_on <= end_date)
         if min_cents is not None:
             query = query.filter(Transaction.amount_cents > min_cents)
+        if q_raw:
+            like = f"%{q_raw}%"
+            query = query.filter(
+                or_(
+                    Transaction.id == q_raw,
+                    Transaction.description.ilike(like),
+                )
+            )
         if direction in {"debit", "credit"}:
             query = query.filter(Transaction.direction == direction)
 
@@ -149,6 +161,7 @@ async def account_details(request: Request, account_id: str):
             "start_date": start_raw,
             "end_date": end_raw,
             "min_amount": min_amount_raw,
+            "q": q_raw,
             "direction": direction if direction != "all" else "",
         }
     )
@@ -166,6 +179,7 @@ async def account_details(request: Request, account_id: str):
         start_date=start_raw,
         end_date=end_raw,
         min_amount=min_amount_raw,
+        q=q_raw,
         direction=direction,
         transactions=transactions,
         total=0 if errors else total,

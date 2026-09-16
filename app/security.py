@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
+import os
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -31,19 +33,55 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def sign_session_id(session_id: str, secret: str) -> str:
-    digest = hmac.new(secret.encode("utf-8"), session_id.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"{session_id}.{digest}"
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
 
 
-def unsign_session_id(value: str | None, secret: str) -> str | None:
+def _b64url_decode(value: str) -> bytes | None:
+    padding = "=" * (-len(value) % 4)
+    try:
+        return base64.urlsafe_b64decode(value + padding)
+    except (ValueError, OSError):
+        return None
+
+
+def sign_session_payload(payload: str, secret: str) -> str:
+    encoded = _b64url(payload.encode("utf-8"))
+    digest = hmac.new(secret.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{encoded}.{digest}"
+
+
+def unsign_session_payload(value: str | None, secret: str) -> dict[str, Any] | None:
     if not value or "." not in value:
         return None
-    session_id, digest = value.rsplit(".", 1)
-    expected = hmac.new(secret.encode("utf-8"), session_id.encode("utf-8"), hashlib.sha256).hexdigest()
+    encoded, digest = value.rsplit(".", 1)
+    expected = hmac.new(secret.encode("utf-8"), encoded.encode("ascii"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(digest, expected):
         return None
-    return session_id
+    raw = _b64url_decode(encoded)
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or "id" not in data or "csrf_token" not in data:
+        return None
+    return data
+
+
+def session_cookie_value(row: PortalSession, secret: str) -> str:
+    payload = json.dumps(
+        {
+            "id": row.id,
+            "employee_id": row.employee_id,
+            "csrf_token": row.csrf_token,
+            "created_at": _as_utc(row.created_at).isoformat(),
+            "expires_at": _as_utc(row.expires_at).isoformat(),
+        },
+        separators=(",", ":"),
+    )
+    return sign_session_payload(payload, secret)
 
 
 def new_token() -> str:
@@ -75,19 +113,25 @@ def save_flags(row: PortalSession, flags: dict[str, Any]) -> None:
     row.flags_json = json.dumps(flags)
 
 
-def set_session_cookie(response, session_id: str, settings: Settings) -> None:
+def set_session_cookie(response, row: PortalSession, settings: Settings) -> None:
     response.set_cookie(
         COOKIE_NAME,
-        sign_session_id(session_id, settings.session_secret),
+        session_cookie_value(row, settings.session_secret),
         httponly=True,
         samesite="lax",
+        secure=os.environ.get("VERCEL") == "1",
         max_age=settings.session_ttl_hours * 3600,
         path="/",
     )
 
 
 def clear_session_cookie(response) -> None:
-    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(
+        COOKIE_NAME,
+        path="/",
+        secure=os.environ.get("VERCEL") == "1",
+        samesite="lax",
+    )
 
 
 def create_session(db: Session, settings: Settings, employee_id: str | None = None) -> PortalSession:
@@ -106,25 +150,52 @@ def create_session(db: Session, settings: Settings, employee_id: str | None = No
 
 
 def _as_utc(value):
-    from datetime import timezone
-
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
 
 
+def _parse_stored_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    return _as_utc(parsed)
+
+
 def get_session_row(db: Session, request: Request, settings: Settings) -> PortalSession | None:
-    raw = request.cookies.get(COOKIE_NAME)
-    session_id = unsign_session_id(raw, settings.session_secret)
-    if not session_id:
+    data = unsign_session_payload(request.cookies.get(COOKIE_NAME), settings.session_secret)
+    if not data:
         return None
-    row = db.get(PortalSession, session_id)
+    try:
+        expires_at = _parse_stored_datetime(str(data["expires_at"]))
+        created_at = _parse_stored_datetime(str(data.get("created_at") or data["expires_at"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if expires_at <= utcnow():
+        row = db.get(PortalSession, data["id"])
+        if row is not None:
+            db.delete(row)
+            db.flush()
+        return None
+
+    row = db.get(PortalSession, data["id"])
+    employee_id = data.get("employee_id") or None
+    csrf_token = str(data["csrf_token"])
     if row is None:
-        return None
-    if _as_utc(row.expires_at) <= utcnow():
-        db.delete(row)
+        # Serverless SQLite copies do not keep portal_sessions. Rebuild from the cookie.
+        row = PortalSession(
+            id=str(data["id"]),
+            employee_id=employee_id,
+            csrf_token=csrf_token,
+            created_at=created_at,
+            expires_at=expires_at,
+            flags_json=json.dumps(default_flags()),
+        )
+        db.add(row)
         db.flush()
-        return None
+        return row
+
+    row.employee_id = employee_id
+    row.csrf_token = csrf_token
+    row.expires_at = expires_at
     return row
 
 

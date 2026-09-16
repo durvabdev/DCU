@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Open account{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/members">Member</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><span aria-current="page">Open account</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Open account</h1>
+  {% if errors %}
+  <ul class="alert alert-error" role="alert">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="/members/{{ member.id }}/accounts/new" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="account_type">Account type</label>
+      <select id="account_type" name="account_type">
+        <option value="checking" {% if account_type == "checking" %}selected{% endif %}>Checking</option>
+        <option value="savings" {% if account_type == "savings" %}selected{% endif %}>Savings</option>
+        <option value="loan" {% if account_type == "loan" %}selected{% endif %}>Loan</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="opening_amount">Opening amount</label>
+      <input id="opening_amount" name="opening_amount" type="text" inputmode="decimal" value="{{ opening_amount }}">
+    </div>
+    <div class="filter-actions">
+      <button type="submit">Open account</button>
+      <a class="button-secondary" href="/members/{{ member.id }}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -10,6 +10,9 @@
 <section class="panel">
   <h1>{{ member.full_name }}</h1>
   <p class="lede">Member profile for internal investigation.</p>
+  {% if flash %}
+  <p class="alert alert-success" role="status">{{ flash }}</p>
+  {% endif %}
   <dl class="facts">
     <div><dt>Member ID</dt><dd>{{ member.id }}</dd></div>
     <div><dt>Status</dt><dd><span class="badge badge-{{ member.status }}">{{ member.status }}</span></dd></div>
@@ -17,6 +20,10 @@
     <div><dt>Phone</dt><dd>{{ member.phone }}</dd></div>
     <div><dt>Address</dt><dd>{{ member.street }}, {{ member.city }}, {{ member.state }} {{ member.postal_code }}</dd></div>
   </dl>
+  <div class="filter-actions">
+    <a class="button" href="/members/{{ member.id }}/edit">Edit member</a>
+    <a class="button-secondary" href="/members/{{ member.id }}/accounts/new">Open account</a>
+  </div>
 </section>
 <section class="panel">
   <h2>Accounts</h2>

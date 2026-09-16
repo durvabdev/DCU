@@ -530,6 +530,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Wipe local demonstration data and restore the deterministic seed.",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Do not print demo usernames or passwords.",
+    )
     args = parser.parse_args(argv)
     settings = get_settings()
     init_engine(settings.database_url)
@@ -539,16 +544,19 @@ def main(argv: list[str] | None = None) -> int:
             db.close()
             reset_database()
             print("Database reset and re-seeded.")
-            print_demo_credentials()
+            if not args.quiet:
+                print_demo_credentials()
             return 0
         if is_seeded(db):
             print("Database already seeded. Use --reset to wipe demonstration data and restore the seed.")
-            print_demo_credentials()
+            if not args.quiet:
+                print_demo_credentials()
             return 0
         seed_database(db)
         db.commit()
         print("Database seeded.")
-        print_demo_credentials()
+        if not args.quiet:
+            print_demo_credentials()
         return 0
     except Exception:
         db.rollback()

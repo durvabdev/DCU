@@ -1,8 +1,14 @@
+from decimal import InvalidOperation
+
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
 
-from app.models import Member
+from app.middleware import csrf_forbidden
+from app.models import Account, Member
+from app.security import require_csrf
 from app.templating import render
+from app.utils import parse_amount_to_cents
 
 router = APIRouter()
 
@@ -66,4 +72,172 @@ async def member_profile(request: Request, member_id: str):
             message="No member exists with that ID.",
         )
     accounts = sorted(member.accounts, key=lambda account: account.id)
-    return render(request, "member.html", member=member, accounts=accounts)
+    return render(
+        request,
+        "member.html",
+        member=member,
+        accounts=accounts,
+        flash=request.query_params.get("flash"),
+    )
+
+
+def _validate_member_form(form) -> tuple[dict[str, str], list[str]]:
+    values = {
+        "first_name": (form.get("first_name") or "").strip(),
+        "last_name": (form.get("last_name") or "").strip(),
+        "email": (form.get("email") or "").strip(),
+        "phone": (form.get("phone") or "").strip(),
+        "street": (form.get("street") or "").strip(),
+        "city": (form.get("city") or "").strip(),
+        "state": (form.get("state") or "").strip(),
+        "postal_code": (form.get("postal_code") or "").strip(),
+    }
+    errors = [f"{field.replace('_', ' ').title()} is required." for field, value in values.items() if not value]
+    return values, errors
+
+
+def _next_account_id(existing_ids: list[str], prefix: str) -> str:
+    max_suffix = 0
+    for account_id in existing_ids:
+        if not account_id.startswith(f"{prefix}-"):
+            continue
+        try:
+            max_suffix = max(max_suffix, int(account_id.split("-", 1)[1]))
+        except ValueError:
+            continue
+    return f"{prefix}-{max_suffix + 1:04d}"
+
+
+@router.get("/members/{member_id}/edit")
+async def member_edit_form(request: Request, member_id: str):
+    db = request.state.db
+    member = db.get(Member, member_id)
+    if member is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Member not found",
+            message="No member exists with that ID.",
+        )
+    return render(request, "member_edit.html", member=member, errors=[])
+
+
+@router.post("/members/{member_id}/edit")
+async def member_edit_submit(request: Request, member_id: str):
+    db = request.state.db
+    member = db.get(Member, member_id)
+    if member is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Member not found",
+            message="No member exists with that ID.",
+        )
+    form = await request.form()
+    row = request.state.portal_session
+    if row is None or not require_csrf(request, row, form.get("csrf_token")):
+        return csrf_forbidden(request)
+    values, errors = _validate_member_form(form)
+    if errors:
+        member_input = {**values, "id": member.id, "status": member.status}
+        return render(request, "member_edit.html", member=member_input, errors=errors)
+
+    for key, value in values.items():
+        setattr(member, key, value)
+    return RedirectResponse(f"/members/{member.id}?flash=Member+profile+updated.", status_code=303)
+
+
+@router.get("/members/{member_id}/accounts/new")
+async def account_new_form(request: Request, member_id: str):
+    db = request.state.db
+    member = db.get(Member, member_id)
+    if member is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Member not found",
+            message="No member exists with that ID.",
+        )
+    if member.status != "active":
+        return render(
+            request,
+            "error.html",
+            status_code=403,
+            title="Member is not active",
+            message="New accounts can only be opened for active members.",
+        )
+    return render(
+        request,
+        "account_new.html",
+        member=member,
+        account_type="checking",
+        opening_amount="0",
+        errors=[],
+    )
+
+
+@router.post("/members/{member_id}/accounts/new")
+async def account_new_submit(request: Request, member_id: str):
+    db = request.state.db
+    member = db.get(Member, member_id)
+    if member is None:
+        return render(
+            request,
+            "error.html",
+            status_code=404,
+            title="Member not found",
+            message="No member exists with that ID.",
+        )
+    if member.status != "active":
+        return render(
+            request,
+            "error.html",
+            status_code=403,
+            title="Member is not active",
+            message="New accounts can only be opened for active members.",
+        )
+    form = await request.form()
+    row = request.state.portal_session
+    if row is None or not require_csrf(request, row, form.get("csrf_token")):
+        return csrf_forbidden(request)
+
+    account_type = (form.get("account_type") or "checking").strip()
+    opening_amount = (form.get("opening_amount") or "0").strip()
+    errors: list[str] = []
+    type_map = {"checking": "CK", "savings": "SV", "loan": "LN"}
+    if account_type not in type_map:
+        errors.append("Select a valid account type.")
+    try:
+        opening_cents = parse_amount_to_cents(opening_amount or "0")
+        if opening_cents < 0:
+            errors.append("Opening amount must be zero or greater.")
+    except (InvalidOperation, ValueError):
+        opening_cents = 0
+        errors.append("Enter a valid opening amount.")
+
+    if errors:
+        return render(
+            request,
+            "account_new.html",
+            member=member,
+            account_type=account_type,
+            opening_amount=opening_amount or "0",
+            errors=errors,
+        )
+
+    existing_ids = [row[0] for row in db.query(Account.id).all()]
+    account_id = _next_account_id(existing_ids, type_map[account_type])
+    account = Account(
+        id=account_id,
+        member_id=member.id,
+        account_type=account_type,
+        status="active",
+        currency="USD",
+        balance_cents=opening_cents,
+    )
+    db.add(account)
+    db.flush()
+    return RedirectResponse(f"/accounts/{account.id}", status_code=303)
