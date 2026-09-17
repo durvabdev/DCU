@@ -257,11 +257,76 @@ def test_credit_debit_blocked_on_inactive_account(auth_client: TestClient):
     assert page.status_code == 200
     assert 'href="/accounts/CK-4200/credit"' not in page.text
     assert 'href="/accounts/CK-4200/debit"' not in page.text
+    assert 'href="/accounts/CK-4200/close"' not in page.text
 
     for path in ("/accounts/CK-4200/credit", "/accounts/CK-4200/debit"):
         response = auth_client.get(path)
         assert response.status_code == 403
         assert "Credits and debits can only be posted on active accounts." in response.text
+
+
+def test_close_account_requires_zero_balance(auth_client: TestClient):
+    page = auth_client.get("/accounts/CK-1001")
+    assert 'href="/accounts/CK-1001/close"' in page.text
+
+    form = auth_client.get("/accounts/CK-1001/close")
+    assert form.status_code == 200
+    assert "Bring the current balance to $0.00 before closing." in form.text
+    assert 'data-testid="confirm-close"' not in form.text
+
+
+def test_close_account_sets_inactive(auth_client: TestClient):
+    open_page = auth_client.get("/members/001234/accounts/new")
+    csrf = extract_csrf(open_page.text)
+    opened = auth_client.post(
+        "/members/001234/accounts/new",
+        data={"csrf_token": csrf, "account_type": "checking"},
+        follow_redirects=False,
+    )
+    assert opened.status_code == 303
+    account_id = "CK-1002"
+
+    form = auth_client.get(f"/accounts/{account_id}/close")
+    assert form.status_code == 200
+    csrf = extract_csrf(form.text)
+    response = auth_client.post(
+        f"/accounts/{account_id}/close",
+        data={"csrf_token": csrf},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    location = response.headers["location"]
+    assert location.startswith(f"/accounts/{account_id}")
+    assert "flash=" in location
+
+    after = auth_client.get(location)
+    assert after.status_code == 200
+    assert f"Account {account_id} closed." in after.text
+    assert "badge-inactive" in after.text
+    assert 'href="/accounts/CK-1002/credit"' not in after.text
+    assert 'href="/accounts/CK-1002/close"' not in after.text
+
+
+def test_close_account_blocked_when_already_inactive(auth_client: TestClient):
+    response = auth_client.get("/accounts/CK-4200/close")
+    assert response.status_code == 403
+    assert "Only active accounts can be closed." in response.text
+
+
+def test_close_account_requires_csrf(auth_client: TestClient):
+    open_page = auth_client.get("/members/005500/accounts/new")
+    csrf = extract_csrf(open_page.text)
+    auth_client.post(
+        "/members/005500/accounts/new",
+        data={"csrf_token": csrf, "account_type": "checking"},
+        follow_redirects=False,
+    )
+    response = auth_client.post(
+        "/accounts/CK-5501/close",
+        data={"csrf_token": "wrong"},
+    )
+    assert response.status_code == 403
+    assert "This form could not be verified." in response.text
 
 
 def test_account_lookup_finds_ck_1001(auth_client: TestClient):

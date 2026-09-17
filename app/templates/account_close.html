@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Close {{ account.id }}{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/members">Member</a></li>
+    <li><a href="/members/{{ member.id }}">{{ member.full_name }}</a></li>
+    <li><a href="/accounts/{{ account.id }}">{{ account.id }}</a></li>
+    <li><span aria-current="page">Close</span></li>
+  </ol>
+</nav>
+<section class="panel">
+  <h1>Close account</h1>
+  <p class="lede">Closing marks the account inactive. Credits, debits, and new notes will no longer be allowed.</p>
+  {% if errors %}
+  <ul class="alert alert-error" role="alert">
+    {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <dl class="facts">
+    <div><dt>Account number</dt><dd>{{ account.id }}</dd></div>
+    <div><dt>Owner</dt><dd>{{ member.full_name }} ({{ member.id }})</dd></div>
+    <div><dt>Type</dt><dd>{{ account.type_label }}</dd></div>
+    <div><dt>{{ account.balance_label }}</dt><dd>{{ account.balance_cents | money }}</dd></div>
+  </dl>
+  {% if can_close %}
+  <form method="post" action="/accounts/{{ account.id }}/close" class="filter-actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="danger" data-testid="confirm-close">Close account</button>
+    <a class="button-secondary" href="/accounts/{{ account.id }}">Cancel</a>
+  </form>
+  {% else %}
+  <div class="filter-actions">
+    <a class="button-secondary" href="/accounts/{{ account.id }}">Back to account</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

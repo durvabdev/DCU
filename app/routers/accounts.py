@@ -41,13 +41,29 @@ def _account_not_found(request: Request):
     )
 
 
-def _account_inactive_forbidden(request: Request):
+def _account_inactive_forbidden(request: Request, *, message: str | None = None):
     return render(
         request,
         "error.html",
         status_code=403,
         title="Account is not active",
-        message="Credits and debits can only be posted on active accounts.",
+        message=message or "Credits and debits can only be posted on active accounts.",
+    )
+
+
+def _render_close_form(
+    request: Request,
+    *,
+    account: Account,
+    errors: list[str] | None = None,
+):
+    return render(
+        request,
+        "account_close.html",
+        account=account,
+        member=account.member,
+        errors=errors or [],
+        can_close=account.status == "active" and account.balance_cents == 0,
     )
 
 
@@ -519,6 +535,55 @@ async def _submit_adjust(request: Request, account_id: str, *, operation: str):
         f"{verb} {format_money(amount_cents)} via transfer "
         f"({debit_txn.id} / {credit_txn.id})."
     )
+    return RedirectResponse(
+        f"/accounts/{account.id}?flash={quote(flash)}",
+        status_code=303,
+    )
+
+
+@router.get("/accounts/{account_id}/close")
+async def account_close_form(request: Request, account_id: str):
+    account = _load_account(request.state.db, account_id)
+    if account is None:
+        return _account_not_found(request)
+    if account.status != "active":
+        return _account_inactive_forbidden(
+            request, message="Only active accounts can be closed."
+        )
+    errors: list[str] = []
+    if account.balance_cents != 0:
+        label = account.balance_label.lower()
+        errors.append(f"Bring the {label} to $0.00 before closing.")
+    return _render_close_form(request, account=account, errors=errors)
+
+
+@router.post("/accounts/{account_id}/close")
+async def account_close_submit(request: Request, account_id: str):
+    db = request.state.db
+    account = _load_account(db, account_id)
+    if account is None:
+        return _account_not_found(request)
+    if account.status != "active":
+        return _account_inactive_forbidden(
+            request, message="Only active accounts can be closed."
+        )
+
+    form = await request.form()
+    row = request.state.portal_session
+    if row is None or not require_csrf(request, row, form.get("csrf_token")):
+        return csrf_forbidden(request)
+
+    if account.balance_cents != 0:
+        label = account.balance_label.lower()
+        return _render_close_form(
+            request,
+            account=account,
+            errors=[f"Bring the {label} to $0.00 before closing."],
+        )
+
+    account.status = "inactive"
+    db.flush()
+    flash = f"Account {account.id} closed."
     return RedirectResponse(
         f"/accounts/{account.id}?flash={quote(flash)}",
         status_code=303,
