@@ -23,6 +23,10 @@
   <form method="post" action="/accounts/{{ account.id }}/{{ operation }}" class="stack" id="adjust-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="field">
+      <label for="account_id">Account number</label>
+      <input id="account_id" type="text" value="{{ account.id }}" readonly>
+    </div>
+    <div class="field">
       <label for="method">Method</label>
       <select id="method" name="method" required>
         <option value="cheque" {% if method == "cheque" %}selected{% endif %}>Cheque</option>
