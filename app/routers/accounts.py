@@ -64,6 +64,7 @@ def _render_close_form(
         member=account.member,
         errors=errors or [],
         can_close=account.status == "active" and account.balance_cents == 0,
+        balance_amount=f"{account.balance_cents / 100:.2f}",
     )
 
 
@@ -379,7 +380,17 @@ async def account_credit_form(request: Request, account_id: str):
         return _account_not_found(request)
     if account.status != "active":
         return _account_inactive_forbidden(request)
-    return _render_adjust_form(request, account=account, operation="credit")
+    method = request.query_params.get("method") or "cheque"
+    if method not in {"cheque", "transfer"}:
+        method = "cheque"
+    return _render_adjust_form(
+        request,
+        account=account,
+        operation="credit",
+        method=method,
+        amount=request.query_params.get("amount") or "",
+        counterparty_id=request.query_params.get("counterparty_id") or "",
+    )
 
 
 @router.post("/accounts/{account_id}/credit")
@@ -394,7 +405,17 @@ async def account_debit_form(request: Request, account_id: str):
         return _account_not_found(request)
     if account.status != "active":
         return _account_inactive_forbidden(request)
-    return _render_adjust_form(request, account=account, operation="debit")
+    method = request.query_params.get("method") or "cheque"
+    if method not in {"cheque", "transfer"}:
+        method = "cheque"
+    return _render_adjust_form(
+        request,
+        account=account,
+        operation="debit",
+        method=method,
+        amount=request.query_params.get("amount") or "",
+        counterparty_id=request.query_params.get("counterparty_id") or "",
+    )
 
 
 @router.post("/accounts/{account_id}/debit")
@@ -550,11 +571,7 @@ async def account_close_form(request: Request, account_id: str):
         return _account_inactive_forbidden(
             request, message="Only active accounts can be closed."
         )
-    errors: list[str] = []
-    if account.balance_cents != 0:
-        label = account.balance_label.lower()
-        errors.append(f"Bring the {label} to $0.00 before closing.")
-    return _render_close_form(request, account=account, errors=errors)
+    return _render_close_form(request, account=account)
 
 
 @router.post("/accounts/{account_id}/close")
@@ -574,12 +591,7 @@ async def account_close_submit(request: Request, account_id: str):
         return csrf_forbidden(request)
 
     if account.balance_cents != 0:
-        label = account.balance_label.lower()
-        return _render_close_form(
-            request,
-            account=account,
-            errors=[f"Bring the {label} to $0.00 before closing."],
-        )
+        return _render_close_form(request, account=account)
 
     account.status = "inactive"
     db.flush()
