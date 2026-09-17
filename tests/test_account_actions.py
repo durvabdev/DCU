@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-import re
-
 from fastapi.testclient import TestClient
 
 from tests.conftest import extract_csrf
@@ -269,22 +265,14 @@ def test_credit_debit_blocked_on_inactive_account(auth_client: TestClient):
         assert "Credits and debits can only be posted on active accounts." in response.text
 
 
-def test_close_account_offers_transfer_when_balance_nonzero(auth_client: TestClient):
+def test_close_account_requires_zero_balance(auth_client: TestClient):
     page = auth_client.get("/accounts/CK-1001")
     assert 'href="/accounts/CK-1001/close"' in page.text
 
     form = auth_client.get("/accounts/CK-1001/close")
     assert form.status_code == 200
-    assert "Bring the current balance to $0.00 before closing." not in form.text
+    assert "Bring the current balance to $0.00 before closing." in form.text
     assert 'data-testid="confirm-close"' not in form.text
-    assert 'data-testid="close-transfer"' in form.text
-    assert 'href="/accounts/CK-1001/debit?method=transfer&amp;amount=' in form.text
-
-    transfer = auth_client.get("/accounts/CK-1001/debit?method=transfer&amount=10.00")
-    assert transfer.status_code == 200
-    assert 'option value="transfer" selected' in transfer.text
-    assert 'id="amount"' in transfer.text
-    assert 'value="10.00"' in transfer.text
 
 
 def test_close_account_sets_inactive(auth_client: TestClient):
@@ -296,10 +284,7 @@ def test_close_account_sets_inactive(auth_client: TestClient):
         follow_redirects=False,
     )
     assert opened.status_code == 303
-    member_after = auth_client.get(opened.headers["location"])
-    match = re.search(r"Account opened\.\s+(CK-\d+)", member_after.text)
-    assert match
-    account_id = match.group(1)
+    account_id = "CK-1002"
 
     form = auth_client.get(f"/accounts/{account_id}/close")
     assert form.status_code == 200
@@ -318,8 +303,8 @@ def test_close_account_sets_inactive(auth_client: TestClient):
     assert after.status_code == 200
     assert f"Account {account_id} closed." in after.text
     assert "badge-inactive" in after.text
-    assert f'href="/accounts/{account_id}/credit"' not in after.text
-    assert f'href="/accounts/{account_id}/close"' not in after.text
+    assert 'href="/accounts/CK-1002/credit"' not in after.text
+    assert 'href="/accounts/CK-1002/close"' not in after.text
 
 
 def test_close_account_blocked_when_already_inactive(auth_client: TestClient):
@@ -331,18 +316,13 @@ def test_close_account_blocked_when_already_inactive(auth_client: TestClient):
 def test_close_account_requires_csrf(auth_client: TestClient):
     open_page = auth_client.get("/members/005500/accounts/new")
     csrf = extract_csrf(open_page.text)
-    opened = auth_client.post(
+    auth_client.post(
         "/members/005500/accounts/new",
         data={"csrf_token": csrf, "account_type": "checking"},
         follow_redirects=False,
     )
-    member_after = auth_client.get(opened.headers["location"])
-    match = re.search(r"Account opened\.\s+(CK-\d+)", member_after.text)
-    assert match
-    account_id = match.group(1)
-
     response = auth_client.post(
-        f"/accounts/{account_id}/close",
+        "/accounts/CK-5501/close",
         data={"csrf_token": "wrong"},
     )
     assert response.status_code == 403

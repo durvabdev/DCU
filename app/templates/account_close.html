@@ -11,11 +11,7 @@
 </nav>
 <section class="panel">
   <h1>Close account</h1>
-  {% if can_close %}
   <p class="lede">Closing marks the account inactive. Credits, debits, and new notes will no longer be allowed.</p>
-  {% else %}
-  <p class="lede">Transfer the remaining balance first, then return here to close.</p>
-  {% endif %}
   {% if errors %}
   <ul class="alert alert-error" role="alert">
     {% for error in errors %}<li>{{ error }}</li>{% endfor %}
@@ -35,12 +31,7 @@
   </form>
   {% else %}
   <div class="filter-actions">
-    {% if account.account_type == "loan" %}
-    <a class="button" data-testid="close-transfer" href="/accounts/{{ account.id }}/credit?method=transfer&amp;amount={{ balance_amount }}">Transfer</a>
-    {% else %}
-    <a class="button" data-testid="close-transfer" href="/accounts/{{ account.id }}/debit?method=transfer&amp;amount={{ balance_amount }}">Transfer</a>
-    {% endif %}
-    <a class="button-secondary" href="/accounts/{{ account.id }}">Cancel</a>
+    <a class="button-secondary" href="/accounts/{{ account.id }}">Back to account</a>
   </div>
   {% endif %}
 </section>
