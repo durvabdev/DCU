@@ -301,7 +301,7 @@ def test_close_account_sets_inactive(auth_client: TestClient):
 
     after = auth_client.get(location)
     assert after.status_code == 200
-    assert f"Account {account_id} closed." in after.text
+    assert f"Account closed: {account_id}" in after.text
     assert "badge-inactive" in after.text
     assert 'href="/accounts/CK-1002/credit"' not in after.text
     assert 'href="/accounts/CK-1002/close"' not in after.text

@@ -583,7 +583,7 @@ async def account_close_submit(request: Request, account_id: str):
 
     account.status = "inactive"
     db.flush()
-    flash = f"Account {account.id} closed."
+    flash = f"Account closed: {account.id}"
     return RedirectResponse(
         f"/accounts/{account.id}?flash={quote(flash)}",
         status_code=303,
